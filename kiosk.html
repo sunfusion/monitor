@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a1628">
+<title>SunFusion · Live Monitor</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#050910;overflow:hidden}
+iframe{width:100%;height:100%;border:none;background:#050910}
+</style>
+</head>
+<body>
+
+<!-- ═══ CONFIG — EDIT THESE VALUES ═══════════════════════════════
+     Change these to match your Solar Assistant system.
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+const SYSTEM_NAME = 'SunFusion HQ';     // Display name in header
+const SYSTEM_IP   = '192.168.0.165';    // Solar Assistant IP
+const SYSTEM_PORT = 9001;               // MQTT WebSocket port
+const SYSTEM_ZIP  = '92081';            // Zip code for weather
+const MONITOR_PATH = 'monitor.html';    // Path to monitor (same folder)
+
+const params = new URLSearchParams({
+  host: SYSTEM_IP,
+  port: SYSTEM_PORT,
+  name: SYSTEM_NAME,
+  zip: SYSTEM_ZIP,
+  mode: 'kiosk'
+});
+
+document.write('<iframe src="' + MONITOR_PATH + '?' + params.toString() + '" allowfullscreen></iframe>');
+</script>
+
+</body>
+</html>

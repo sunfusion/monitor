@@ -1,0 +1,52 @@
+<!--
+╔══════════════════════════════════════════════════════════════════════╗
+║  SUNFUSION KIOSK — SQUARESPACE EMBED CODE                          ║
+║                                                                      ║
+║  NO LOCK SCREEN — Monitor loads immediately.                         ║
+║                                                                      ║
+║  HOW TO INSTALL IN SQUARESPACE:                                      ║
+║                                                                      ║
+║  1. Edit the CONFIG section below (lines 30-35)                      ║
+║  2. Host monitor.html on a web server (see SQUARESPACE_INSTALL.md)   ║
+║  3. In Squarespace: Pages → click your monitor page                  ║
+║  4. Click the gear ⚙ → Advanced tab                                 ║
+║  5. Paste EVERYTHING below this comment block into                   ║
+║     "Page Header Code Injection"                                     ║
+║  6. Save                                                             ║
+║                                                                      ║
+║  COPY FROM THE NEXT LINE DOWN ↓↓↓                                    ║
+╚══════════════════════════════════════════════════════════════════════╝
+-->
+
+<!-- SUNFUSION KIOSK — PASTE EVERYTHING BELOW INTO SQUARESPACE -->
+
+<style>
+  /* Hide all Squarespace page content — monitor takes over the full page */
+  header, footer, .page-section, .content-wrapper, #siteWrapper,
+  .header--menu-open, .sqs-announcement-bar, nav { display:none !important; }
+  body { margin:0 !important; padding:0 !important; overflow:hidden !important; background:#050910 !important; }
+</style>
+
+<div id="sf-kiosk"></div>
+
+<script>
+// ═══ CONFIG — EDIT THESE 5 VALUES ══════════════════════════════
+const SF_NAME  = 'SunFusion HQ';             // System name (shows in header)
+const SF_IP    = '192.168.0.165';             // Solar Assistant local IP
+const SF_PORT  = 9001;                        // MQTT WebSocket port
+const SF_ZIP   = '92081';                     // Zip code (for weather)
+const SF_URL   = 'https://YOUR-DOMAIN.com/sunfusion-app/monitor.html';
+// ═══ END CONFIG ════════════════════════════════════════════════
+
+(function(){
+  var src = SF_URL
+    + '?host=' + encodeURIComponent(SF_IP)
+    + '&port=' + SF_PORT
+    + '&name=' + encodeURIComponent(SF_NAME)
+    + '&zip='  + SF_ZIP
+    + '&mode=kiosk';
+
+  document.getElementById('sf-kiosk').innerHTML =
+    '<iframe src="' + src + '" style="position:fixed;top:0;left:0;width:100%;height:100%;border:none;background:#050910;z-index:999999" allowfullscreen></iframe>';
+})();
+</script>

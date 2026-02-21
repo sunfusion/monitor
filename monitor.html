@@ -1,0 +1,2766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SunFusion">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#FFB627">
+<meta name="description" content="SunFusion Energy Systems — Live Solar Energy Monitor">
+<meta name="msapplication-TileColor" content="#050910">
+<meta name="msapplication-navbutton-color" content="#FFB627">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+<title>SunFusion · Live Energy Monitor v7</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Mono:wght@300;400;500&family=Exo+2:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg:        #05090f;
+  --bg-card:   #080e18;
+  --bg-panel:  #0a1220;
+  --border:    rgba(255,255,255,0.10);
+  --border-hi: rgba(255,255,255,0.20);
+  --sol:   #ffb627; --sol-d: #cc8a00; --sol-g: rgba(255,182,39,0.18);
+  --bat:   #00e5a0; --bat-d: #00a870; --bat-g: rgba(0,229,160,0.18);
+  --grd:   #38b6ff; --grd-d: #0080cc; --grd-g: rgba(56,182,255,0.18);
+  --load:  #c084fc; --load-d:#8b22e8; --load-g:rgba(192,132,252,0.18);
+  --wx:    #ff8c69; --wx-d:  #cc5533; --wx-g:  rgba(255,140,105,0.18);
+  --danger: #ff4444; --danger-g: rgba(255,68,68,0.15);
+  --warn:   #ffaa00; --warn-g: rgba(255,170,0,0.12);
+  --txt:   #f0f4f8; --txt-2: #8aacc8; --txt-3: #4a7090;
+  --r: 14px;
+  --transition: 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; background:var(--bg); color:var(--txt); font-family:'Exo 2',sans-serif; overflow:hidden; -webkit-text-size-adjust:100%; }
+
+.kiosk-root { width:100%; height:100%; display:flex; flex-direction:column; position:relative; overflow:hidden;
+  padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+
+.bg-mesh {
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(255,182,39,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(0,229,160,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 50% 50%, rgba(56,182,255,0.025) 0%, transparent 70%);
+}
+.bg-mesh::after {
+  content:''; position:absolute; inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);
+  pointer-events:none;
+}
+
+/* ── ALERT BANNER ─────────────────────────────────── */
+.alert-banner {
+  position:relative; z-index:15;
+  max-height:0; overflow:hidden;
+  transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+.alert-banner.show { max-height:120px; }
+
+.alert-banner-inner {
+  display:flex; align-items:center; gap:12px;
+  padding:10px 28px;
+  font-family:'DM Mono',monospace; font-size:11px;
+  letter-spacing:1px; animation: alert-flash 2s ease-in-out infinite;
+}
+.alert-banner-inner.critical {
+  background:linear-gradient(90deg, rgba(255,68,68,0.12), rgba(255,68,68,0.06));
+  border-bottom:1px solid rgba(255,68,68,0.3);
+  color:var(--danger);
+}
+.alert-banner-inner.warning {
+  background:linear-gradient(90deg, rgba(255,170,0,0.1), rgba(255,170,0,0.04));
+  border-bottom:1px solid rgba(255,170,0,0.25);
+  color:var(--warn);
+}
+.alert-banner-inner.info {
+  background:linear-gradient(90deg, rgba(56,182,255,0.08), rgba(56,182,255,0.03));
+  border-bottom:1px solid rgba(56,182,255,0.2);
+  color:var(--grd);
+}
+
+@keyframes alert-flash {
+  0%,100% { opacity:1; }
+  50% { opacity:0.85; }
+}
+
+.alert-icon { font-size:11px; flex-shrink:0; }
+.alert-msg  { flex:1; line-height:1.4; }
+.alert-time { font-size:11px; color:var(--txt-2); white-space:nowrap; }
+.alert-dismiss {
+  background:none; border:1px solid currentColor; border-radius:6px;
+  color:inherit; padding:3px 10px; font-size:11px; letter-spacing:2px;
+  cursor:pointer; font-family:'DM Mono',monospace; opacity:0.7;
+  transition:opacity 0.2s;
+}
+.alert-dismiss:hover { opacity:1; }
+
+/* ── ALERT HISTORY PANEL ──────────────────────────── */
+.alert-panel {
+  position:fixed; top:0; right:0; height:100vh; width:380px;
+  background:rgba(5,9,15,0.98); border-left:1px solid var(--border);
+  z-index:1100; transform:translateX(100%);
+  transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  overflow-y:auto; padding:20px; backdrop-filter:blur(20px);
+}
+.alert-panel.open { transform:translateX(0); }
+
+.alert-panel-title {
+  font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:3px;
+  color:var(--danger); margin-bottom:16px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+
+.alert-history-item {
+  display:flex; gap:10px; padding:10px 12px; margin-bottom:6px;
+  border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-card); animation:card-in 0.3s ease both;
+  transition:border-color 0.2s;
+}
+.alert-history-item:hover { border-color:var(--border-hi); }
+.alert-history-item.critical { border-left:3px solid var(--danger); }
+.alert-history-item.warning  { border-left:3px solid var(--warn); }
+.alert-history-item.info     { border-left:3px solid var(--grd); }
+.alert-history-item.resolved { opacity:0.5; }
+
+.ah-icon { font-size:11px; flex-shrink:0; padding-top:2px; }
+.ah-body { flex:1; }
+.ah-title { font-size:11px; font-weight:600; letter-spacing:1px; margin-bottom:2px; }
+.ah-desc  { font-size:11px; color:var(--txt-2); line-height:1.5; font-family:'DM Mono',monospace; }
+.ah-time  { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; margin-top:3px; }
+.ah-resolved { font-size:11px; color:var(--bat); font-family:'DM Mono',monospace; }
+
+.alert-clear-btn {
+  width:100%; margin-top:12px; padding:8px;
+  background:none; border:1px solid var(--border); border-radius:8px;
+  color:var(--txt-2); font-family:'DM Mono',monospace; font-size:11px;
+  letter-spacing:2px; cursor:pointer; transition:all 0.2s;
+}
+.alert-clear-btn:hover { border-color:var(--danger); color:var(--danger); }
+
+.alert-empty {
+  text-align:center; padding:40px 20px; color:var(--txt-3);
+  font-family:'DM Mono',monospace; font-size:11px; letter-spacing:2px;
+}
+
+/* ── HEADER ───────────────────────────────────────── */
+.hdr {
+  position:relative; z-index:10;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 28px;
+  border-bottom:1px solid var(--border);
+  background:rgba(5,9,15,0.85);
+  backdrop-filter:blur(20px);
+  flex-shrink:0;
+}
+
+.brand { display:flex; align-items:center; gap:14px; }
+.brand-sun {
+  width:56px; height:56px; border-radius:14px;
+  background:linear-gradient(135deg,var(--sol),var(--sol-d));
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 24px var(--sol-g),inset 0 1px 0 rgba(255,255,255,0.2);
+  flex-shrink:0; animation:sun-pulse 4s ease-in-out infinite;
+}
+@keyframes sun-pulse {
+  0%,100% { box-shadow:0 0 24px var(--sol-g); }
+  50%     { box-shadow:0 0 40px rgba(255,182,39,0.35); }
+}
+.brand-sun svg { width:32px; height:32px; }
+.brand-name { font-family:'Orbitron',sans-serif; font-size:22px; font-weight:700; letter-spacing:8px; color:var(--txt); line-height:1; }
+.brand-tag  { font-size:12px; letter-spacing:4px; color:var(--txt-2); text-transform:uppercase; margin-top:4px; font-family:'DM Mono',monospace; }
+
+.hdr-weather {
+  display:flex; align-items:center; gap:14px;
+  font-family:'DM Mono',monospace; font-size:11px; color:var(--txt-2);
+  background:rgba(255,140,105,0.04); border:1px solid rgba(255,140,105,0.12);
+  border-radius:10px; padding:6px 14px; transition:all 0.4s; min-width:180px; justify-content:center;
+}
+.hdr-weather.has-data { border-color:rgba(255,140,105,0.25); background:rgba(255,140,105,0.06); }
+.wx-icon-hdr  { font-size:11px; line-height:1; }
+.wx-temp-hdr  { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:600; color:var(--wx); }
+.wx-desc-hdr  { font-size:11px; letter-spacing:1px; color:var(--txt-2); text-transform:uppercase; max-width:80px; line-height:1.3; }
+.wx-loc-hdr   { font-size:11px; letter-spacing:1px; color:var(--txt-3); }
+
+.hdr-center { display:flex; align-items:center; gap:8px; font-family:'DM Mono',monospace; font-size:11px; color:var(--txt-2); letter-spacing:1px; }
+
+.live-dot { width:7px; height:7px; border-radius:50%; background:var(--bat); box-shadow:0 0 8px var(--bat); animation:blink 2s ease-in-out infinite; display:none; }
+.live-dot.visible { display:block; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.hdr-right { display:flex; align-items:center; gap:10px; }
+
+.pill {
+  display:flex; align-items:center; gap:7px; padding:5px 12px; border-radius:100px;
+  border:1px solid; font-size:11px; letter-spacing:2px; font-weight:600;
+  font-family:'DM Mono',monospace; transition:all 0.4s;
+}
+.pill.connected    { border-color:rgba(0,229,160,0.5); color:var(--bat); background:var(--bat-g); }
+.pill.disconnected { border-color:rgba(255,80,80,0.4); color:#ff5555; background:rgba(255,80,80,0.08); }
+.pill.connecting   { border-color:rgba(255,182,39,0.4); color:var(--sol); background:var(--sol-g); }
+.pill-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.pill.connected .pill-dot { animation:blink 2s ease-in-out infinite; }
+
+.icon-btn {
+  width:34px; height:34px; background:var(--bg-panel); border:1px solid var(--border);
+  border-radius:8px; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all 0.2s; color:var(--txt-2); font-size:11px; position:relative;
+}
+.icon-btn:hover { border-color:var(--sol); color:var(--sol); background:var(--sol-g); }
+
+/* Alert bell badge */
+.alert-badge {
+  position:absolute; top:-4px; right:-4px;
+  min-width:16px; height:16px; border-radius:8px;
+  background:var(--danger); color:#fff;
+  font-family:'DM Mono',monospace; font-size:11px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  padding:0 4px; box-shadow:0 0 8px var(--danger-g);
+  animation:badge-pulse 2s ease-in-out infinite;
+  pointer-events:none;
+}
+.alert-badge.hidden { display:none; }
+@keyframes badge-pulse {
+  0%,100% { box-shadow:0 0 8px var(--danger-g); }
+  50%     { box-shadow:0 0 16px rgba(255,68,68,0.4); }
+}
+
+.clock { font-family:'DM Mono',monospace; font-size:11px; color:var(--txt-2); letter-spacing:2px; }
+
+/* ── MAIN GRID ────────────────────────────────────── */
+.body {
+  position:relative; z-index:1; flex:1; overflow:hidden;
+  display:flex; flex-direction:column; padding:8px 20px 10px;
+}
+
+.gauges { display:none; } /* hidden — data now in detail overlays */
+.mid-row { display:grid; grid-template-columns:1fr 220px; gap:10px; flex:1; min-height:0; }
+.data-strip { display:none; } /* hidden — sparklines in detail overlays */
+
+/* ── CARD BASE ───────────────────────────────────── */
+.card {
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r);
+  position:relative; overflow:hidden; animation:card-in 0.6s ease both;
+}
+@keyframes card-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+.card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent,rgba(255,255,255,0.12)),transparent);
+}
+.card.sol  { --accent:var(--sol); }  .card.bat  { --accent:var(--bat); }
+.card.grd  { --accent:var(--grd); }  .card.load { --accent:var(--load); }
+.card.wx   { --accent:var(--wx); }
+
+.card.sol.active  { box-shadow:0 0 0 1px rgba(255,182,39,0.2),0 8px 40px var(--sol-g); }
+.card.bat.active  { box-shadow:0 0 0 1px rgba(0,229,160,0.2),0 8px 40px var(--bat-g); }
+.card.grd.active  { box-shadow:0 0 0 1px rgba(56,182,255,0.2),0 8px 40px var(--grd-g); }
+.card.load.active { box-shadow:0 0 0 1px rgba(192,132,252,0.2),0 8px 40px var(--load-g); }
+
+/* ── GAUGE CARD (compact) ─────────────────────────── */
+.gauge-card { padding:6px 8px 5px; display:flex; flex-direction:column; align-items:center; gap:2px; transition:box-shadow 0.6s; }
+.gauge-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; align-self:flex-start; }
+.gauge-ring { position:relative; width:58px; height:58px; flex-shrink:0; }
+.gauge-ring svg { width:100%; height:100%; transform:rotate(-90deg); }
+.ring-bg   { fill:none; stroke:rgba(255,255,255,0.05); stroke-width:8; stroke-linecap:round; }
+.ring-fill { fill:none; stroke-width:8; stroke-linecap:round; stroke-dasharray:0 314; transition:stroke-dasharray var(--transition); }
+.ring-glow { fill:none; stroke-width:12; stroke-linecap:round; stroke-dasharray:0 314; transition:stroke-dasharray var(--transition); opacity:0.2; filter:blur(4px); }
+
+.sol .ring-fill{stroke:var(--sol)} .sol .ring-glow{stroke:var(--sol)}
+.bat .ring-fill{stroke:var(--bat)} .bat .ring-glow{stroke:var(--bat)}
+.grd .ring-fill{stroke:var(--grd)} .grd .ring-glow{stroke:var(--grd)}
+.load .ring-fill{stroke:var(--load)} .load .ring-glow{stroke:var(--load)}
+
+.gauge-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; }
+.gauge-pct { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700; line-height:1; transition:color 0.4s; }
+.sol .gauge-pct{color:var(--sol)} .bat .gauge-pct{color:var(--bat)} .grd .gauge-pct{color:var(--grd)} .load .gauge-pct{color:var(--load)}
+.gauge-pct-u { font-size:11px; color:var(--txt-2); letter-spacing:1px; font-family:'DM Mono',monospace; }
+.gauge-val { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700; line-height:1; letter-spacing:-0.5px; transition:all 0.4s; }
+.sol .gauge-val{color:var(--sol)} .bat .gauge-val{color:var(--bat)} .grd .gauge-val{color:var(--grd)} .load .gauge-val{color:var(--load)}
+.gauge-unit { font-size:11px; color:var(--txt-2); letter-spacing:1px; font-family:'DM Mono',monospace; }
+.gauge-sub  { font-size:11px; color:var(--txt-2); letter-spacing:1px; font-family:'DM Mono',monospace; min-height:10px; }
+
+.soc-track { width:100%; height:3px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden; }
+.soc-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--bat-d),var(--bat)); box-shadow:0 0 8px var(--bat-g); transition:width var(--transition); }
+
+.g-badge { font-size:11px; letter-spacing:2px; font-weight:600; padding:1px 6px; border-radius:100px; font-family:'DM Mono',monospace; transition:all 0.4s; }
+.g-badge.exp { background:rgba(0,229,160,0.12); color:var(--bat); border:1px solid rgba(0,229,160,0.25); }
+.g-badge.imp { background:rgba(56,182,255,0.12); color:var(--grd); border:1px solid rgba(56,182,255,0.25); }
+.g-badge.idle{ background:rgba(255,255,255,0.04); color:var(--txt-2); border:1px solid var(--border); }
+
+/* ── POWER FLOW ───────────────────────────────────── */
+.flow-card { padding:14px; display:flex; flex-direction:column; flex:1; min-height:0; }
+.card-title { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; margin-bottom:6px; }
+.flow-wrap { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; padding:4px; }
+.flow-wrap svg { width:100%; height:100%; }
+.flow-node { cursor:pointer; transition:opacity 0.2s; }
+.flow-node:hover { opacity:0.8; }
+.flow-node circle { transition:stroke-width 0.2s, r 0.2s; }
+.flow-node:hover circle { stroke-width:2.5; }
+.flow-center { cursor:pointer; transition:opacity 0.2s; }
+.flow-center:hover { opacity:0.8; }
+.flow-center:hover rect { stroke-width:2.5; }
+
+.fp { fill:none; stroke-width:2; stroke-linecap:round; }
+.fp-static { stroke-dasharray:5 5; opacity:0.15; }
+.fp-sol{stroke:var(--sol)} .fp-bat{stroke:var(--bat)} .fp-grd{stroke:var(--grd)} .fp-load{stroke:var(--load)}
+.fa-sol{stroke-dasharray:10 6;animation:fa .7s linear infinite}
+.fa-bat{stroke-dasharray:10 6;animation:fa 1.1s linear infinite}
+.fa-bat-rev{stroke-dasharray:10 6;animation:fa-rev 1.1s linear infinite}
+.fa-grd{stroke-dasharray:10 6;animation:fa .9s linear infinite}
+.fa-grd-rev{stroke-dasharray:10 6;animation:fa-rev .9s linear infinite}
+.fa-load{stroke-dasharray:10 6;animation:fa .8s linear infinite}
+@keyframes fa { to{stroke-dashoffset:-16} }
+@keyframes fa-rev { to{stroke-dashoffset:16} }
+.flow-lbl { font-family:'Orbitron',sans-serif; font-size:14px; font-weight:600; transition:opacity 0.4s; }
+
+/* ── STATS CARD ───────────────────────────────────── */
+.stats-card { padding:14px; }
+.stat-row { display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); animation:card-in 0.6s ease both; }
+.stat-row:last-child { border-bottom:none; }
+.stat-label { font-size:11px; color:var(--txt-2); letter-spacing:1px; font-family:'DM Mono',monospace; display:flex; align-items:center; gap:6px; }
+.stat-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.stat-val { font-family:'Orbitron',monospace; font-size:11px; font-weight:600; transition:all 0.4s; }
+
+/* ── WEATHER FORECAST CARD (vertical panel) ───────── */
+.wx-forecast-card { padding:12px; display:flex; flex-direction:column; gap:6px; overflow:hidden; }
+.wx-forecast-header { display:flex; flex-direction:column; gap:4px; }
+.wx-forecast-title { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.wx-forecast-loc { font-size:11px; color:var(--wx); font-family:'DM Mono',monospace; letter-spacing:1px; }
+.wx-legend { display:flex; gap:8px; font-size:11px; color:var(--txt-2); font-family:'DM Mono',monospace; letter-spacing:1px; align-items:center; flex-wrap:wrap; }
+.wx-legend-item { display:flex; align-items:center; gap:3px; }
+.wx-legend-swatch { width:10px; height:3px; border-radius:2px; }
+
+.wx-timeline { display:flex; flex-direction:column; overflow-y:auto; gap:0; flex:1; scrollbar-width:thin; scrollbar-color: var(--border) transparent; }
+.wx-timeline::-webkit-scrollbar { width:4px; }
+.wx-timeline::-webkit-scrollbar-track { background:transparent; }
+.wx-timeline::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+.wx-hour {
+  display:grid; grid-template-columns:36px 24px 34px 32px 1fr;
+  align-items:center; gap:4px;
+  padding:4px 6px; border-bottom:1px solid rgba(255,255,255,0.03);
+  transition:background 0.2s; min-height:28px;
+}
+.wx-hour:hover { background:rgba(255,140,105,0.04); }
+.wx-hour.now-hour { background:rgba(255,182,39,0.06); border-radius:6px; }
+.wx-hour-time { font-size:11px; color:var(--txt-2); font-family:'DM Mono',monospace; letter-spacing:1px; white-space:nowrap; }
+.wx-hour-icon { font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center; }
+.wx-hour-temp { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:600; color:var(--wx); text-align:right; }
+.wx-hour-cloud-wrap { display:flex; flex-direction:column; align-items:stretch; gap:1px; }
+.wx-hour-cloud-bar { width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,0.05); overflow:hidden; }
+.wx-hour-cloud-fill { height:100%; border-radius:2px; transition:width 0.4s; }
+.wx-hour-cloud-fill.clear{background:var(--sol)} .wx-hour-cloud-fill.partly{background:rgba(255,182,39,0.5)}
+.wx-hour-cloud-fill.cloudy{background:rgba(100,140,180,0.6)} .wx-hour-cloud-fill.heavy{background:rgba(80,100,130,0.5)}
+.wx-hour-cloud-pct { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; text-align:center; }
+.wx-hour-pv-bar { width:100%; height:3px; border-radius:2px; background:rgba(255,255,255,0.03); overflow:hidden; }
+.wx-hour-pv-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--sol-d),var(--sol)); box-shadow:0 0 4px var(--sol-g); transition:width 0.4s; }
+.wx-hour-desc { display:none; /* hidden in vertical mode — too tight */ }
+.wx-no-data { text-align:center; padding:20px 8px; font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; letter-spacing:1px; line-height:1.6; }
+.wx-no-data a { color:var(--sol); cursor:pointer; text-decoration:underline; }
+
+/* Day separator in vertical timeline */
+.wx-day-sep {
+  font-size:11px; color:var(--sol); font-family:'DM Mono',monospace;
+  letter-spacing:2px; padding:4px 6px 2px; text-transform:uppercase;
+  border-top:1px solid rgba(255,182,39,0.1); margin-top:2px;
+}
+
+.wx-hour.wx-alert-hour { background:rgba(255,68,68,0.06); }
+.wx-hour.wx-alert-hour .wx-hour-time { color:var(--danger); }
+
+/* ── DATA STRIP ───────────────────────────────────── */
+.data-tile {
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  padding:8px 12px; display:flex; flex-direction:column; gap:3px;
+  animation:card-in 0.6s ease both; transition:box-shadow 0.4s;
+}
+.data-tile:hover { border-color:var(--border-hi); }
+.tile-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; }
+.tile-val { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:600; line-height:1; transition:all 0.4s; }
+.tile-unit { font-size:11px; color:var(--txt-2); letter-spacing:1px; font-family:'DM Mono',monospace; }
+.spark { height:22px; width:100%; margin-top:2px; }
+.spark svg { width:100%; height:100%; overflow:visible; }
+.spark-path { fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; opacity:0.7; }
+.spark-fill { opacity:0.08; }
+
+/* ── CONFIG DRAWER ────────────────────────────────── */
+.drawer {
+  position:fixed; top:0; right:0; height:100vh; width:340px;
+  background:rgba(5,9,15,0.98); border-left:1px solid var(--border);
+  z-index:1000; transform:translateX(100%);
+  transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  overflow-y:auto; padding:20px; backdrop-filter:blur(20px);
+}
+.drawer.open { transform:translateX(0); }
+.drawer-title { font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:3px; color:var(--sol); margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; }
+.f-group { margin-bottom:14px; }
+.f-lbl { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); margin-bottom:4px; display:block; font-family:'DM Mono',monospace; }
+.f-inp {
+  width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+  padding:8px 12px; color:var(--txt); font-family:'DM Mono',monospace; font-size:11px;
+  outline:none; transition:border-color 0.2s;
+}
+.f-inp:focus { border-color:var(--sol); }
+.f-hint { font-size:11px; color:var(--txt-3); margin-top:3px; }
+.btn-primary { width:100%; padding:12px; background:linear-gradient(135deg,var(--sol),var(--sol-d)); border:none; border-radius:10px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:3px; cursor:pointer; font-weight:700; box-shadow:0 4px 20px var(--sol-g); transition:all 0.2s; }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 28px var(--sol-g); }
+.btn-secondary { width:100%; padding:10px; background:rgba(255,140,105,0.08); border:1px solid rgba(255,140,105,0.25); border-radius:10px; color:var(--wx); font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:2px; cursor:pointer; font-weight:600; transition:all 0.2s; }
+.btn-secondary:hover { background:rgba(255,140,105,0.14); }
+.hdiv { border:none; border-top:1px solid var(--border); margin:16px 0; }
+.debug-log { background:#02050a; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-family:'DM Mono',monospace; font-size:11px; line-height:1.8; max-height:180px; overflow-y:auto; color:var(--txt-2); }
+.debug-log .e{color:#ff6060} .debug-log .ok{color:var(--bat)} .debug-log .i{color:var(--sol)}
+
+/* Toggle switch */
+.toggle-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.toggle-label { font-size:11px; color:var(--txt-2); font-family:'DM Mono',monospace; letter-spacing:1px; }
+.toggle {
+  width:38px; height:20px; border-radius:10px; background:var(--border);
+  position:relative; cursor:pointer; transition:background 0.3s;
+}
+.toggle.on { background:rgba(0,229,160,0.4); }
+.toggle::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:16px; height:16px; border-radius:50%;
+  background:var(--txt-2); transition:all 0.3s;
+}
+.toggle.on::after { left:20px; background:var(--bat); }
+
+/* ── SPLASH ───────────────────────────────────────── */
+.splash {
+  position:fixed; inset:0; z-index:900; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; background:var(--bg); gap:20px; transition:opacity 0.4s;
+}
+.splash.hidden { opacity:0; pointer-events:none; display:none!important; }
+.splash-logo { font-family:'Orbitron',sans-serif; font-size:48px; font-weight:900; letter-spacing:16px; background:linear-gradient(135deg,var(--sol),#fff8e0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; filter:drop-shadow(0 0 30px var(--sol-g)); }
+.splash-sub { font-size:14px; letter-spacing:6px; color:var(--txt-2); text-transform:uppercase; font-family:'DM Mono',monospace; }
+.splash-form { display:flex; flex-direction:column; gap:10px; width:100%; max-width:420px; padding:0 20px; }
+.s-inp { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:11px 15px; color:var(--txt); font-family:'DM Mono',monospace; font-size:11px; outline:none; transition:border-color 0.2s; width:100%; }
+.s-inp:focus { border-color:var(--sol); }
+.s-row { display:grid; grid-template-columns:2fr 1fr; gap:8px; }
+.s-section-label { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; margin-top:6px; padding-left:2px; display:flex; align-items:center; gap:6px; }
+.s-section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+.s-btn { padding:16px; background:linear-gradient(135deg,var(--sol),var(--sol-d)); border:none; border-radius:12px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:14px; letter-spacing:4px; cursor:pointer; font-weight:700; box-shadow:0 4px 30px var(--sol-g); transition:all 0.2s; width:100%; margin-top:6px; }
+.s-btn:hover { transform:translateY(-2px); box-shadow:0 8px 40px var(--sol-g); }
+.s-note { font-size:11px; color:var(--txt-3); text-align:center; letter-spacing:1px; line-height:1.7; font-family:'DM Mono',monospace; min-height:16px; }
+.s-url { color:var(--sol); }
+.s-inp-big { font-size:18px!important; padding:14px 18px!important; text-align:center; letter-spacing:2px; border-radius:12px!important; }
+.s-step { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.s-step-num { width:28px; height:28px; border-radius:50%; background:var(--sol); color:#0a0800; font-family:'Orbitron',sans-serif; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.s-step-text { font-family:'Exo 2',sans-serif; font-size:13px; color:var(--txt); letter-spacing:0.5px; }
+.s-help { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; text-align:center; letter-spacing:0.5px; line-height:1.6; }
+.s-help b { color:var(--sol); font-weight:500; }
+.s-footer { display:flex; justify-content:space-between; font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; letter-spacing:1px; margin-top:4px; }
+.s-debug { margin-top:4px; }
+
+@keyframes num-pop { 0%{transform:scale(1)} 30%{transform:scale(1.06)} 100%{transform:scale(1)} }
+.num-update { animation:num-pop 0.3s ease; }
+
+/* ── ADMIN MODAL ─────────────────────────────────── */
+.admin-overlay { position:fixed; inset:0; z-index:2000; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.3s; }
+.admin-overlay.open { opacity:1; pointer-events:all; }
+.admin-modal { background:var(--bg-card); border:1px solid var(--border-hi); border-radius:16px; padding:28px; width:300px; display:flex; flex-direction:column; gap:16px; box-shadow:0 0 60px rgba(0,0,0,0.6); transform:scale(0.94); transition:transform 0.3s; }
+.admin-overlay.open .admin-modal { transform:scale(1); }
+.admin-title { font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:3px; color:var(--sol); text-align:center; }
+.admin-sub { font-size:11px; color:var(--txt-2); text-align:center; letter-spacing:1px; font-family:'DM Mono',monospace; margin-top:-8px; }
+.admin-inp { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--txt); font-family:'DM Mono',monospace; font-size:11px; letter-spacing:4px; outline:none; text-align:center; transition:border-color 0.2s; }
+.admin-inp:focus { border-color:var(--sol); }
+.admin-inp.err { border-color:#ff5555; animation:shake 0.3s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+.admin-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.admin-cancel { padding:10px; background:none; border:1px solid var(--border); border-radius:8px; color:var(--txt-2); font-family:'Exo 2',sans-serif; font-size:11px; cursor:pointer; transition:all 0.2s; }
+.admin-cancel:hover { border-color:var(--txt-2); color:var(--txt); }
+.admin-enter { padding:10px; background:linear-gradient(135deg,var(--sol),var(--sol-d)); border:none; border-radius:8px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:2px; cursor:pointer; font-weight:700; transition:all 0.2s; }
+
+.bat-tabs { display:flex; gap:6px; margin-bottom:4px; }
+.bat-tab { flex:1; padding:4px 8px; border-radius:6px; font-size:11px; letter-spacing:2px; text-align:center; font-family:'DM Mono',monospace; cursor:pointer; border:1px solid var(--border); color:var(--txt-2); transition:all 0.2s; }
+.bat-tab.active { border-color:rgba(0,229,160,0.4); color:var(--bat); background:rgba(0,229,160,0.08); }
+
+.card:nth-child(1){animation-delay:.05s} .card:nth-child(2){animation-delay:.1s}
+.card:nth-child(3){animation-delay:.15s} .card:nth-child(4){animation-delay:.2s}
+.data-tile:nth-child(1){animation-delay:.25s} .data-tile:nth-child(2){animation-delay:.3s}
+.data-tile:nth-child(3){animation-delay:.35s} .data-tile:nth-child(4){animation-delay:.4s}
+.data-tile:nth-child(5){animation-delay:.45s} .data-tile:nth-child(6){animation-delay:.5s}
+
+/* ── DETAIL OVERLAY PANELS ─────────────────────────── */
+.detail-overlay {
+  position:fixed; inset:0; z-index:1100;
+  background:rgba(5,9,15,0.97); backdrop-filter:blur(20px);
+  transform:translateY(100%); transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.detail-overlay.open { transform:translateY(0); }
+
+.do-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 24px; border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.do-title { font-family:'Orbitron',sans-serif; font-size:16px; letter-spacing:3px; }
+.do-close { background:none; border:1px solid var(--border); border-radius:8px; color:var(--txt-2); padding:6px 14px; font-family:'DM Mono',monospace; font-size:11px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; }
+.do-close:hover { border-color:var(--sol); color:var(--sol); }
+
+.do-body { flex:1; overflow-y:auto; padding:16px 24px; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+
+.do-tabs { display:flex; gap:4px; padding:0 24px 0; margin-top:10px; flex-shrink:0; flex-wrap:wrap; }
+.do-tab {
+  padding:5px 14px; border-radius:6px; border:1px solid var(--border);
+  background:none; color:var(--txt-2); font-family:'DM Mono',monospace;
+  font-size:11px; letter-spacing:1px; cursor:pointer; transition:all 0.2s;
+}
+.do-tab.active { border-color:var(--sol); color:var(--sol); background:var(--sol-g); }
+
+.do-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; margin-bottom:16px; }
+
+.do-metric {
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  padding:12px 16px; display:flex; flex-direction:column; gap:3px;
+}
+.do-metric-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; }
+.do-metric-val { font-family:'Orbitron',sans-serif; font-size:18px; font-weight:600; line-height:1.2; }
+.do-metric-unit { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; }
+
+.do-section-title {
+  font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--txt-2);
+  font-family:'DM Mono',monospace; margin:16px 0 8px; padding-bottom:6px;
+  border-bottom:1px solid var(--border);
+}
+.do-section-title:first-child { margin-top:0; }
+
+.do-status-badge {
+  display:inline-block; padding:2px 10px; border-radius:100px;
+  font-size:11px; font-family:'DM Mono',monospace; letter-spacing:2px; font-weight:600;
+}
+.do-status-badge.ok { background:rgba(0,229,160,0.12); color:var(--bat); border:1px solid rgba(0,229,160,0.25); }
+.do-status-badge.warn { background:var(--warn-g); color:var(--warn); border:1px solid rgba(255,170,0,0.25); }
+.do-status-badge.err { background:var(--danger-g); color:var(--danger); border:1px solid rgba(255,68,68,0.25); }
+
+/* ── VERSION BADGE ────────────────────────────────── */
+.ver-badge { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; letter-spacing:2px; }
+
+/* ── HISTORY PANEL ────────────────────────────────── */
+.hist-panel {
+  position:fixed; inset:0; z-index:1200;
+  background:rgba(5,9,15,0.97); backdrop-filter:blur(20px);
+  transform:translateY(100%); transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.hist-panel.open { transform:translateY(0); }
+
+.hist-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 24px; border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.hist-title { font-family:'Orbitron',sans-serif; font-size:11px; letter-spacing:3px; color:var(--sol); }
+.hist-close { background:none; border:1px solid var(--border); border-radius:8px; color:var(--txt-2); padding:6px 14px; font-family:'DM Mono',monospace; font-size:11px; letter-spacing:2px; cursor:pointer; transition:all 0.2s; }
+.hist-close:hover { border-color:var(--sol); color:var(--sol); }
+
+.hist-toolbar {
+  display:flex; align-items:center; gap:12px; padding:12px 24px;
+  border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap;
+}
+
+.hist-range-btns { display:flex; gap:4px; }
+.hist-range-btn {
+  padding:5px 12px; border-radius:6px; border:1px solid var(--border);
+  background:none; color:var(--txt-2); font-family:'DM Mono',monospace;
+  font-size:11px; letter-spacing:1px; cursor:pointer; transition:all 0.2s;
+}
+.hist-range-btn.active { border-color:var(--sol); color:var(--sol); background:var(--sol-g); }
+.hist-range-btn:hover { border-color:var(--sol); }
+
+.hist-metric-sel {
+  background:var(--bg); border:1px solid var(--border); border-radius:6px;
+  color:var(--txt); font-family:'DM Mono',monospace; font-size:11px;
+  padding:5px 10px; outline:none; cursor:pointer;
+}
+.hist-metric-sel:focus { border-color:var(--sol); }
+
+.hist-actions { display:flex; gap:6px; margin-left:auto; }
+.hist-action-btn {
+  padding:5px 12px; border-radius:6px; border:1px solid var(--border);
+  background:none; color:var(--txt-2); font-family:'DM Mono',monospace;
+  font-size:11px; letter-spacing:1px; cursor:pointer; transition:all 0.2s;
+}
+.hist-action-btn:hover { border-color:var(--bat); color:var(--bat); }
+.hist-action-btn.danger:hover { border-color:var(--danger); color:var(--danger); }
+
+.hist-body { flex:1; display:flex; flex-direction:column; overflow:hidden; padding:16px 24px; gap:12px; }
+
+.hist-chart-wrap {
+  flex:1; min-height:200px; position:relative;
+  background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r);
+  overflow:hidden;
+}
+.hist-chart-svg { width:100%; height:100%; }
+.hist-chart-line { fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.hist-chart-fill { opacity:0.06; }
+.hist-chart-grid { stroke:var(--border); stroke-width:0.5; }
+.hist-chart-label { fill:var(--txt-3); font-family:'DM Mono',monospace; font-size:11px; }
+.hist-chart-val-label { fill:var(--txt-2); font-family:'DM Mono',monospace; font-size:11px; }
+
+.hist-crosshair { position:absolute; top:0; bottom:0; width:1px; background:rgba(255,182,39,0.4); pointer-events:none; display:none; }
+.hist-tooltip {
+  position:absolute; top:8px; background:rgba(5,9,15,0.95); border:1px solid var(--border);
+  border-radius:8px; padding:6px 10px; pointer-events:none; display:none; z-index:5;
+  font-family:'DM Mono',monospace; font-size:11px; color:var(--txt); white-space:nowrap;
+}
+
+.hist-stats {
+  display:grid; grid-template-columns:repeat(6,1fr); gap:8px; flex-shrink:0;
+}
+.hist-stat-card {
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  padding:10px 14px; display:flex; flex-direction:column; gap:2px;
+}
+.hist-stat-label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); font-family:'DM Mono',monospace; }
+.hist-stat-val { font-family:'Orbitron',sans-serif; font-size:11px; font-weight:600; color:var(--sol); }
+.hist-stat-unit { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; }
+
+.hist-db-stats {
+  display:flex; gap:16px; padding:8px 0; font-size:11px; color:var(--txt-3);
+  font-family:'DM Mono',monospace; letter-spacing:1px; flex-shrink:0; flex-wrap:wrap;
+}
+.hist-db-stat { display:flex; align-items:center; gap:4px; }
+.hist-db-dot { width:6px; height:6px; border-radius:50%; }
+
+.hist-loading { text-align:center; padding:60px; color:var(--txt-3); font-family:'DM Mono',monospace; font-size:11px; letter-spacing:2px; }
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div class="splash" id="splash">
+  <div style="font-size:72px;filter:drop-shadow(0 0 20px var(--sol-g))">☀️</div>
+  <div class="splash-logo">SUNFUSION</div>
+  <div class="splash-sub">Energy Monitor <span class="ver-badge" id="ver-splash"></span></div>
+  <div class="splash-form">
+
+    <div class="s-step">
+      <div class="s-step-num">1</div>
+      <div class="s-step-text">Enter your Solar Assistant IP address</div>
+    </div>
+    <input class="s-inp s-inp-big" id="si-host" placeholder="192.168.1.___" inputmode="url" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div class="s-help">Find this in your Solar Assistant app under <b>Settings → Network</b></div>
+
+    <div class="s-step">
+      <div class="s-step-num">2</div>
+      <div class="s-step-text">Enter your zip code for weather forecasts</div>
+    </div>
+    <input class="s-inp s-inp-big" id="si-zip" placeholder="e.g. 92081" inputmode="numeric" maxlength="5">
+
+    <button class="s-btn" onclick="connectFromSplash()">START MONITORING</button>
+
+    <div class="s-note" id="splash-status"></div>
+    <div style="text-align:center;margin-top:6px;display:flex;flex-direction:column;gap:6px">
+      <a href="customer.html" style="color:var(--bat);font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;text-decoration:none">🏠 Customer? Look up your system here →</a>
+      <a href="fleet.html" style="color:var(--txt-3);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;text-decoration:none">🔒 Admin Fleet Manager</a>
+    </div>
+    <div class="debug-log s-debug" id="splash-log" style="display:none"></div>
+    <div class="s-footer">
+      <span onclick="document.getElementById('splash-log').style.display=document.getElementById('splash-log').style.display==='none'?'block':'none'" style="cursor:pointer;opacity:0.3">show log</span>
+      <span onclick="toggleAdvancedSplash()" style="cursor:pointer;opacity:0.3" id="adv-toggle">advanced</span>
+    </div>
+
+    <!-- Hidden advanced fields — auto-filled with defaults -->
+    <div id="splash-advanced" style="display:none">
+      <div class="s-section-label" style="margin-top:12px">Advanced Settings</div>
+      <div class="s-row">
+        <input class="s-inp" id="si-port" value="9001" placeholder="Port">
+        <input class="s-inp" id="si-prefix" value="solar_assistant" placeholder="Topic prefix">
+      </div>
+      <div class="s-row">
+        <input class="s-inp" id="si-user" placeholder="Username (optional)">
+        <input class="s-inp" id="si-pass" type="password" placeholder="Password">
+      </div>
+    </div>
+    <input type="hidden" id="si-wxkey" value="e1402547e7fb3358332b3b921a2e2027">
+  </div>
+</div>
+<script>
+// Instantly hide splash if URL params (from Fleet) or saved config exist
+(function(){
+  var h=false;
+  try{h=!!new URLSearchParams(window.location.search).get('host')}catch(e){}
+  if(!h)try{h=!!JSON.parse(localStorage.getItem('sf_v6')||'{}').host}catch(e){}
+  if(h){var s=document.getElementById('splash');if(s){s.style.display='none';s.classList.add('hidden');}}
+})();
+</script>
+
+<!-- ROOT -->
+<div class="kiosk-root">
+  <div class="bg-mesh"></div>
+
+  <!-- ALERT BANNER (slides down when active) -->
+  <div class="alert-banner" id="alert-banner">
+    <div class="alert-banner-inner critical" id="alert-banner-inner">
+      <div class="alert-icon" id="alert-banner-icon">⚠️</div>
+      <div class="alert-msg" id="alert-banner-msg">—</div>
+      <div class="alert-time" id="alert-banner-time">—</div>
+      <button class="alert-dismiss" onclick="dismissBanner()">DISMISS</button>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <div style="display:flex;align-items:center;gap:8px">
+      <a class="icon-btn" id="fleet-back-btn" href="fleet.html" title="Back to Fleet" style="text-decoration:none;font-size:14px">◂</a>
+      <div class="brand">
+      <div class="brand-sun">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0a0800" stroke-width="2.5" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
+          <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.78" y2="4.22"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">SUNFUSION</div>
+        <div class="brand-tag">Energy Systems · Live Monitor · <span class="ver-badge" id="ver-hdr"></span></div>
+      </div>
+      </div>
+    </div><!-- /brand+fleet wrapper -->
+
+    <div class="hdr-weather" id="hdr-weather">
+      <span style="font-size:11px;color:var(--txt-3);letter-spacing:2px">☁ WEATHER —</span>
+    </div>
+
+    <div class="hdr-center">
+      <div class="live-dot" id="live-dot"></div>
+      <span id="hdr-status" style="transition:all 0.4s">—</span>
+    </div>
+
+    <div class="hdr-right">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="pill disconnected" id="conn-pill">
+        <div class="pill-dot"></div>
+        <span id="conn-txt">OFFLINE</span>
+      </div>
+      <button class="icon-btn" id="pwa-install-btn" onclick="pwaInstall()" title="Install App" style="display:none;background:var(--sol-g);border:1px solid rgba(255,182,39,0.3)">📲</button>
+      <a class="icon-btn" href="fleet.html" title="Fleet Manager" style="text-decoration:none">🗺</a>
+      <button class="icon-btn" onclick="toggleHistPanel()" title="Data History" id="hist-btn">📊</button>
+      <button class="icon-btn" onclick="toggleAlertPanel()" title="Alerts" id="alert-bell-btn">
+        🔔
+        <div class="alert-badge hidden" id="alert-badge">0</div>
+      </button>
+      <button class="icon-btn" onclick="toggleFs()" title="Fullscreen">⛶</button>
+      <button class="icon-btn" onclick="toggleDrawer()" title="Settings">⚙</button>
+      <button class="icon-btn" id="customer-logout-btn" onclick="customerLogout()" title="Log Out" style="display:none;border:1px solid rgba(255,68,68,0.3);color:#ff6666;font-size:11px;letter-spacing:1px;padding:4px 10px">LOGOUT</button>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <div class="body">
+    <div class="gauges">
+      <div class="card gauge-card sol" id="card-sol">
+        <div class="gauge-label">☀ Solar PV</div>
+        <div class="gauge-ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="314 314"/><circle class="ring-glow" cx="60" cy="60" r="50" id="ring-glow-sol"/><circle class="ring-fill" cx="60" cy="60" r="50" id="ring-sol"/></svg><div class="gauge-center"><div class="gauge-pct" id="pct-sol">—</div><div class="gauge-pct-u">%</div></div></div>
+        <div class="gauge-val" id="val-sol">—</div><div class="gauge-unit">WATTS</div><div class="gauge-sub" id="sub-sol">—</div>
+      </div>
+      <div class="card gauge-card bat" id="card-bat">
+        <div class="gauge-label">🔋 Battery</div>
+        <div class="gauge-ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="314 314"/><circle class="ring-glow" cx="60" cy="60" r="50" id="ring-glow-bat"/><circle class="ring-fill" cx="60" cy="60" r="50" id="ring-bat"/></svg><div class="gauge-center"><div class="gauge-pct" id="pct-bat">—</div><div class="gauge-pct-u">SOC</div></div></div>
+        <div class="gauge-val" id="val-bat">—</div><div class="gauge-unit">WATTS · <span id="bat-dir">—</span></div>
+        <div class="soc-track"><div class="soc-fill" id="soc-fill" style="width:0%"></div></div>
+      </div>
+      <div class="card gauge-card grd" id="card-grd">
+        <div class="gauge-label">⚡ Grid</div>
+        <div class="gauge-ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="314 314"/><circle class="ring-glow" cx="60" cy="60" r="50" id="ring-glow-grd"/><circle class="ring-fill" cx="60" cy="60" r="50" id="ring-grd"/></svg><div class="gauge-center"><div class="gauge-pct" id="pct-grd">—</div><div class="gauge-pct-u">%</div></div></div>
+        <div class="gauge-val" id="val-grd">—</div><div class="gauge-unit">WATTS</div>
+        <div class="g-badge idle" id="grd-badge">IDLE</div>
+      </div>
+      <div class="card gauge-card load" id="card-load">
+        <div class="gauge-label">🏠 Load</div>
+        <div class="gauge-ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="50" stroke-dasharray="314 314"/><circle class="ring-glow" cx="60" cy="60" r="50" id="ring-glow-load"/><circle class="ring-fill" cx="60" cy="60" r="50" id="ring-load"/></svg><div class="gauge-center"><div class="gauge-pct" id="pct-load">—</div><div class="gauge-pct-u">%</div></div></div>
+        <div class="gauge-val" id="val-load">—</div><div class="gauge-unit">WATTS</div><div class="gauge-sub" id="sub-load">Consumed</div>
+      </div>
+    </div>
+
+    <div class="mid-row">
+      <div class="card flow-card">
+        <div class="card-title">⟶ Power Flow <span style="color:var(--txt-3);margin-left:8px">tap a node for details</span></div>
+        <div class="flow-wrap">
+          <svg viewBox="0 0 450 270" id="flow-svg" preserveAspectRatio="xMidYMid meet">
+            <!-- Sol-Ark Center -->
+            <g class="flow-center" onclick="openDetail('solark')">
+              <rect x="177" y="108" width="96" height="54" rx="12" fill="var(--bg-panel)" stroke="var(--border)" stroke-width="1.5"/>
+              <text x="225" y="130" text-anchor="middle" fill="var(--txt-2)" font-family="Orbitron,sans-serif" font-size="11" letter-spacing="1" font-weight="600">SOL-ARK</text>
+              <text x="225" y="148" text-anchor="middle" fill="var(--txt-3)" font-family="Exo 2,sans-serif" font-size="11" letter-spacing="1">INVERTER</text>
+            </g>
+            <!-- PV Node -->
+            <g class="flow-node" onclick="openDetail('pv')">
+              <circle cx="225" cy="33" r="27" fill="var(--bg-card)" stroke="rgba(255,182,39,0.4)" stroke-width="1.5"/>
+              <text x="225" y="28" text-anchor="middle" font-size="14">☀</text>
+              <text x="225" y="45" text-anchor="middle" fill="var(--sol)" font-family="Orbitron,sans-serif" font-size="11" letter-spacing="1">PV</text>
+            </g>
+            <path id="fp-sol" d="M225 60 L225 108" class="fp fp-sol fp-static"/><text id="lbl-sol" class="flow-lbl" x="250" y="88" fill="var(--sol)" opacity="0.4" font-size="14">0W</text>
+            <!-- Battery Node -->
+            <g class="flow-node" onclick="openDetail('battery')">
+              <circle cx="51" cy="135" r="27" fill="var(--bg-card)" stroke="rgba(0,229,160,0.4)" stroke-width="1.5"/>
+              <text x="51" y="130" text-anchor="middle" font-size="14">🔋</text>
+              <text x="51" y="147" text-anchor="middle" fill="var(--bat)" font-family="Orbitron,sans-serif" font-size="11" letter-spacing="1">BAT</text>
+            </g>
+            <path id="fp-bat" d="M78 135 L177 135" class="fp fp-bat fp-static"/><text id="lbl-bat" class="flow-lbl" x="128" y="125" fill="var(--bat)" text-anchor="middle" opacity="0.4" font-size="14">0W</text>
+            <!-- Grid Node -->
+            <g class="flow-node" onclick="openDetail('grid')">
+              <circle cx="399" cy="135" r="27" fill="var(--bg-card)" stroke="rgba(56,182,255,0.4)" stroke-width="1.5"/>
+              <text x="399" y="130" text-anchor="middle" font-size="14">⚡</text>
+              <text x="399" y="147" text-anchor="middle" fill="var(--grd)" font-family="Orbitron,sans-serif" font-size="11" letter-spacing="1">GRID</text>
+            </g>
+            <path id="fp-grd" d="M372 135 L273 135" class="fp fp-grd fp-static"/><text id="lbl-grd" class="flow-lbl" x="322" y="125" fill="var(--grd)" text-anchor="middle" opacity="0.4" font-size="14">0W</text>
+            <!-- Load Node -->
+            <g class="flow-node" onclick="openDetail('load')">
+              <circle cx="225" cy="237" r="27" fill="var(--bg-card)" stroke="rgba(192,132,252,0.4)" stroke-width="1.5"/>
+              <text x="225" y="232" text-anchor="middle" font-size="14">🏠</text>
+              <text x="225" y="249" text-anchor="middle" fill="var(--load)" font-family="Orbitron,sans-serif" font-size="11" letter-spacing="1">LOAD</text>
+            </g>
+            <path id="fp-load" d="M225 231 L225 162" class="fp fp-load fp-static"/><text id="lbl-load" class="flow-lbl" x="250" y="200" fill="var(--load)" opacity="0.4" font-size="14">0W</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- WEATHER FORECAST (vertical panel) -->
+      <div class="card wx wx-forecast-card" id="wx-card">
+        <div class="wx-forecast-header">
+          <div class="wx-forecast-title">☁ PV Forecast <span class="wx-forecast-loc" id="wx-loc">—</span></div>
+          <div class="wx-legend">
+            <div class="wx-legend-item"><div class="wx-legend-swatch" style="background:var(--sol)"></div> PV</div>
+            <div class="wx-legend-item" style="color:var(--bat)">✓ OK</div>
+            <div class="wx-legend-item" style="color:#ff3333">-95%</div>
+            <button onclick="fetchWeather()" style="background:none;border:1px solid rgba(255,140,105,0.25);border-radius:6px;color:var(--wx);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;padding:2px 6px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.background='rgba(255,140,105,0.1)'" onmouseout="this.style.background='none'">↻</button>
+          </div>
+        </div>
+        <div class="wx-timeline" id="wx-timeline">
+          <div class="wx-no-data" id="wx-no-data">Enter zip code in <a onclick="toggleDrawer()">Settings ⚙</a></div>
+          <div class="wx-no-data" id="wx-status" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="data-strip">
+      <div class="data-tile"><div class="tile-label">Solar Power</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-sol" style="color:var(--sol)">—</div><div class="tile-unit">W</div></div><div class="spark" id="spark-sol"><svg><polyline class="spark-path" style="stroke:var(--sol)" id="sl-sol"/><polygon class="spark-fill" style="fill:var(--sol)" id="sf-sol"/></svg></div></div>
+      <div class="data-tile"><div class="tile-label">Battery SOC</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-soc" style="color:var(--bat)">—</div><div class="tile-unit">%</div></div><div class="spark" id="spark-soc"><svg><polyline class="spark-path" style="stroke:var(--bat)" id="sl-soc"/><polygon class="spark-fill" style="fill:var(--bat)" id="sf-soc"/></svg></div></div>
+      <div class="data-tile"><div class="tile-label">Grid Power</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-grd" style="color:var(--grd)">—</div><div class="tile-unit">W</div></div><div class="spark" id="spark-grd"><svg><polyline class="spark-path" style="stroke:var(--grd)" id="sl-grd"/><polygon class="spark-fill" style="fill:var(--grd)" id="sf-grd"/></svg></div></div>
+      <div class="data-tile"><div class="tile-label">Load Power</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-load" style="color:var(--load)">—</div><div class="tile-unit">W</div></div><div class="spark" id="spark-load"><svg><polyline class="spark-path" style="stroke:var(--load)" id="sl-load"/><polygon class="spark-fill" style="fill:var(--load)" id="sf-load"/></svg></div></div>
+      <div class="data-tile"><div class="tile-label">Bat Voltage</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-bv" style="color:var(--bat)">—</div><div class="tile-unit">V</div></div><div class="spark" id="spark-bv"><svg><polyline class="spark-path" style="stroke:var(--bat)" id="sl-bv"/><polygon class="spark-fill" style="fill:var(--bat)" id="sf-bv"/></svg></div></div>
+      <div class="data-tile"><div class="tile-label">Grid Freq</div><div style="display:flex;align-items:baseline;gap:4px"><div class="tile-val" id="t-gf" style="color:var(--grd)">—</div><div class="tile-unit">Hz</div></div><div class="spark" id="spark-gf"><svg><polyline class="spark-path" style="stroke:var(--grd)" id="sl-gf"/><polygon class="spark-fill" style="fill:var(--grd)" id="sf-gf"/></svg></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ALERT HISTORY PANEL -->
+<div class="alert-panel" id="alert-panel">
+  <div class="alert-panel-title">
+    🚨 ALERT HISTORY
+    <button class="icon-btn" onclick="document.getElementById('alert-panel').classList.remove('open')">✕</button>
+  </div>
+  <div id="alert-history-list">
+    <div class="alert-empty" id="alert-empty">✓ No alerts — system nominal</div>
+  </div>
+  <button class="alert-clear-btn" onclick="clearAlertHistory()">CLEAR ALL ALERTS</button>
+</div>
+
+<!-- CONFIG DRAWER -->
+<div class="drawer" id="drawer">
+  <div class="drawer-title">SETTINGS <span class="ver-badge" id="ver-drawer"></span> <button class="icon-btn" onclick="document.getElementById('drawer').classList.remove('open')">✕</button></div>
+
+  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--grd);font-family:'DM Mono',monospace;margin-bottom:12px">📡 Connection</div>
+  <div class="f-group"><label class="f-lbl">Solar Assistant IP</label><input class="f-inp" id="cf-host" placeholder="192.168.1.___"><div class="f-hint">Your Solar Assistant device IP address</div></div>
+  <div class="f-group"><label class="f-lbl">Port</label><input class="f-inp" id="cf-port" value="9001"><div class="f-hint">Default: 9001 — auto-tries 1883 if 9001 fails</div></div>
+  <div class="f-group"><label class="f-lbl">Topic Prefix</label><input class="f-inp" id="cf-prefix" value="solar_assistant"><div class="f-hint">Default: solar_assistant</div></div>
+  <div class="f-group"><label class="f-lbl">Username</label><input class="f-inp" id="cf-user" placeholder="(leave blank if none)"></div>
+  <div class="f-group"><label class="f-lbl">Password</label><input class="f-inp" id="cf-pass" type="password" placeholder="(leave blank if none)"></div>
+  <button class="btn-primary" onclick="reconnect()">RECONNECT</button>
+
+  <div class="hdiv"></div>
+  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--sol);font-family:'DM Mono',monospace;margin-bottom:12px">☀ System Size</div>
+  <div class="f-group"><label class="f-lbl">Solar Panel Size (Watts)</label><input class="f-inp" id="cf-maxpv" value="10000"><div class="f-hint">Total wattage of your solar array</div></div>
+  <div class="f-group"><label class="f-lbl">Max Home Load (Watts)</label><input class="f-inp" id="cf-maxload" value="15000"><div class="f-hint">Maximum your home typically uses</div></div>
+
+  <div class="hdiv"></div>
+  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--wx);font-family:'DM Mono',monospace;margin-bottom:12px">☁ Weather</div>
+  <div class="f-group"><label class="f-lbl">Zip Code</label><input class="f-inp" id="cf-zip" placeholder="92081"><div class="f-hint">For weather forecast and solar production alerts</div></div>
+  <input type="hidden" id="cf-wxkey" value="e1402547e7fb3358332b3b921a2e2027">
+  <button class="btn-secondary" onclick="fetchWeather()">↻ REFRESH WEATHER</button>
+
+  <div class="hdiv"></div>
+  <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--danger);font-family:'DM Mono',monospace;margin-bottom:12px">🚨 Alerts</div>
+
+  <div class="toggle-row"><span class="toggle-label">Sound alerts</span><div class="toggle" id="tgl-audio" onclick="toggleSetting('audio')"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Grid failure alerts</span><div class="toggle on" id="tgl-grid" onclick="toggleSetting('grid')"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Weather alerts</span><div class="toggle on" id="tgl-weather" onclick="toggleSetting('weather')"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Low battery alerts</span><div class="toggle on" id="tgl-lowbat" onclick="toggleSetting('lowbat')"></div></div>
+  <div class="toggle-row"><span class="toggle-label">High temperature alerts</span><div class="toggle on" id="tgl-hightemp" onclick="toggleSetting('hightemp')"></div></div>
+
+  <div class="f-group"><label class="f-lbl">Low Battery Warning (%)</label><input class="f-inp" id="cf-lowbat" value="20"><div class="f-hint">Alert when battery drops below this</div></div>
+  <div class="f-group"><label class="f-lbl">High Temp Warning (°F)</label><input class="f-inp" id="cf-hightemp" value="130"><div class="f-hint">Alert when equipment exceeds this temp</div></div>
+  <div class="f-group"><label class="f-lbl">Min Grid Voltage (V)</label><input class="f-inp" id="cf-gridvmin" value="100"><div class="f-hint">Alert when grid voltage drops below this</div></div>
+
+  <div class="hdiv"></div>
+  <div class="f-lbl" style="margin-bottom:6px">System Log</div>
+  <div class="debug-log" id="drawer-log"></div>
+</div>
+
+<!-- ADMIN MODAL -->
+<!-- Settings drawer opens directly (no password) -->
+
+<!-- ═══ DETAIL OVERLAYS ═══════════════════════════════════════════════════ -->
+
+<!-- PV DETAIL -->
+<div class="detail-overlay" id="do-pv">
+  <div class="do-header">
+    <div class="do-title" style="color:var(--sol)">☀ SOLAR PV DETAIL</div>
+    <button class="do-close" onclick="closeDetail('pv')">✕ CLOSE</button>
+  </div>
+  <div class="do-body" id="do-pv-body"></div>
+</div>
+
+<!-- BATTERY DETAIL -->
+<div class="detail-overlay" id="do-battery">
+  <div class="do-header">
+    <div class="do-title" style="color:var(--bat)">🔋 BATTERY DETAIL</div>
+    <button class="do-close" onclick="closeDetail('battery')">✕ CLOSE</button>
+  </div>
+  <div class="do-tabs" id="do-bat-tabs"></div>
+  <div class="do-body" id="do-battery-body"></div>
+</div>
+
+<!-- GRID DETAIL -->
+<div class="detail-overlay" id="do-grid">
+  <div class="do-header">
+    <div class="do-title" style="color:var(--grd)">⚡ GRID DETAIL</div>
+    <button class="do-close" onclick="closeDetail('grid')">✕ CLOSE</button>
+  </div>
+  <div class="do-body" id="do-grid-body"></div>
+</div>
+
+<!-- LOAD DETAIL -->
+<div class="detail-overlay" id="do-load">
+  <div class="do-header">
+    <div class="do-title" style="color:var(--load)">🏠 LOAD DETAIL</div>
+    <button class="do-close" onclick="closeDetail('load')">✕ CLOSE</button>
+  </div>
+  <div class="do-body" id="do-load-body"></div>
+</div>
+
+<!-- SOL-ARK DETAIL -->
+<div class="detail-overlay" id="do-solark">
+  <div class="do-header">
+    <div class="do-title" style="color:var(--sol)">⚡ SOL-ARK INVERTER SYSTEM</div>
+    <button class="do-close" onclick="closeDetail('solark')">✕ CLOSE</button>
+  </div>
+  <div class="do-tabs" id="do-inv-tabs"></div>
+  <div class="do-body" id="do-solark-body"></div>
+</div>
+
+<!-- HISTORY PANEL (full-screen overlay) -->
+<div class="hist-panel" id="hist-panel">
+  <div class="hist-header">
+    <div class="hist-title">📊 DATA HISTORY</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="hist-db-stats" id="hist-db-stats"></div>
+      <button class="hist-close" onclick="toggleHistPanel()">✕ CLOSE</button>
+    </div>
+  </div>
+  <div class="hist-toolbar">
+    <div class="hist-range-btns">
+      <button class="hist-range-btn active" onclick="setHistRange('24h')">24H</button>
+      <button class="hist-range-btn" onclick="setHistRange('7d')">7D</button>
+      <button class="hist-range-btn" onclick="setHistRange('30d')">30D</button>
+      <button class="hist-range-btn" onclick="setHistRange('1y')">1Y</button>
+      <button class="hist-range-btn" onclick="setHistRange('5y')">5Y</button>
+      <button class="hist-range-btn" onclick="setHistRange('all')">ALL</button>
+    </div>
+    <select class="hist-metric-sel" id="hist-metric" onchange="loadHistChart()">
+      <option value="pv">☀ Solar PV (W)</option>
+      <option value="soc">🔋 Battery SOC (%)</option>
+      <option value="bPower">🔋 Battery Power (W)</option>
+      <option value="bVolt">🔋 Battery Voltage (V)</option>
+      <option value="bAmp">🔋 Battery Current (A)</option>
+      <option value="bTemp">🌡 Battery Temp (°F)</option>
+      <option value="grid">⚡ Grid Power (W)</option>
+      <option value="gVolt">⚡ Grid Voltage (V)</option>
+      <option value="gFreq">⚡ Grid Frequency (Hz)</option>
+      <option value="load">🏠 Load Power (W)</option>
+      <option value="pvVolt">☀ PV Voltage (V)</option>
+      <option value="pvAmp">☀ PV Current (A)</option>
+      <option value="iTemp">🌡 Inverter Temp (°F)</option>
+    </select>
+    <div class="hist-actions">
+      <button class="hist-action-btn" onclick="exportHistCSV()">📁 EXPORT CSV</button>
+      <button class="hist-action-btn danger" onclick="purgeHistDB()">🗑 PURGE DB</button>
+    </div>
+  </div>
+  <div class="hist-body">
+    <div class="hist-chart-wrap" id="hist-chart-wrap">
+      <svg class="hist-chart-svg" id="hist-chart-svg"></svg>
+      <div class="hist-crosshair" id="hist-crosshair"></div>
+      <div class="hist-tooltip" id="hist-tooltip"></div>
+      <div class="hist-loading" id="hist-loading">Loading data…</div>
+    </div>
+    <div class="hist-stats" id="hist-stats"></div>
+  </div>
+</div>
+
+<script>
+// ─── VERSION ──────────────────────────────────────────────────────────────────
+const VERSION = 'v7.5.0';
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const cfg = {
+  host:'', port:9001, prefix:'solar_assistant', user:'', pass:'',
+  maxPv:10000, maxLoad:15000, zip:'92081', wxKey:'e1402547e7fb3358332b3b921a2e2027',
+  alertAudio:false, alertGrid:true, alertWeather:true, alertLowBat:true, alertHighTemp:true,
+  lowBatPct:20, highTempF:130, gridVMin:100
+};
+let mqttClient = null;
+
+const state = {
+  pv:null, soc:null, bPower:null, bVolt:null, bAmp:null, bTemp:null,
+  grid:null, gVolt:null, gFreq:null,
+  pvVolt:null, pvAmp:null, iTemp:null, load:null,
+  bat:[{soc:null,volt:null,amp:null,power:null,temp:null},{soc:null,volt:null,amp:null,power:null,temp:null}]
+};
+
+let activeBatTab = 1;
+const topicsSeen = new Set();
+const sparks = { sol:[], soc:[], grd:[], load:[], bv:[], gf:[] };
+let wxData = null, wxLat = null, wxLon = null, wxCity = '', wxRefreshTimer = null;
+
+// ─── EXPANDED STATE (for detail overlays) ─────────────────────────────────────
+// Captures ALL MQTT topics seen — raw key:value store
+const rawMQTT = {};
+// Battery modules: up to 15
+const batModules = Array.from({length:15}, () => ({soc:null,volt:null,amp:null,power:null,temp:null,seen:false}));
+// Inverter units: up to 12
+const invUnits = Array.from({length:12}, () => ({model:'',serial:'',firmware:'',installDate:'',temp:null,power:null,seen:false}));
+// PV strings
+const pvStrings = Array.from({length:4}, () => ({volt:null,amp:null,power:null,seen:false}));
+// Grid phases
+const gridPhases = Array.from({length:3}, () => ({volt:null,freq:null,power:null,current:null,seen:false}));
+// Load circuits
+const loadData = {total:null, l1:null, l2:null, apparent:null, reactive:null, pf:null, seen:false};
+
+let activeDetailBat = 0; // 0=all, 1-15=specific
+let activeDetailInv = 0; // 0=all, 1-12=specific
+let openDetailPanel = null;
+
+// ─── DETAIL OVERLAY FUNCTIONS ──────────────────────────────────────────────────
+function openDetail(type) {
+  // Close any other open detail
+  document.querySelectorAll('.detail-overlay.open').forEach(el => el.classList.remove('open'));
+  const panel = document.getElementById('do-'+type);
+  if(panel) { panel.classList.add('open'); openDetailPanel = type; populateDetail(type); }
+}
+
+function closeDetail(type) {
+  const panel = document.getElementById('do-'+type);
+  if(panel) panel.classList.remove('open');
+  openDetailPanel = null;
+}
+
+function metricHTML(label, val, unit, color) {
+  const display = val !== null && val !== undefined ? (typeof val === 'number' ? val.toFixed(val<10&&val>-10?2:1) : val) : '—';
+  return `<div class="do-metric"><div class="do-metric-label">${label}</div><div class="do-metric-val" style="color:${color||'var(--txt)'}">${display}</div><div class="do-metric-unit">${unit||''}</div></div>`;
+}
+
+function populateDetail(type) {
+  switch(type) {
+    case 'pv': populatePV(); break;
+    case 'battery': populateBattery(); break;
+    case 'grid': populateGrid(); break;
+    case 'load': populateLoad(); break;
+    case 'solark': populateSolArk(); break;
+  }
+}
+
+function populatePV() {
+  const s = state;
+  const c = 'var(--sol)';
+  let html = '<div class="do-section-title">☀ SOLAR OVERVIEW</div><div class="do-grid">';
+  html += metricHTML('Total PV Power', s.pv, 'W', c);
+  html += metricHTML('PV Voltage', s.pvVolt, 'V', c);
+  html += metricHTML('PV Current', s.pvAmp, 'A', c);
+  const eff = (s.pv && cfg.maxPv) ? ((s.pv / cfg.maxPv) * 100) : null;
+  html += metricHTML('Array Efficiency', eff, '% of rated', c);
+  html += metricHTML('Array Rating', cfg.maxPv, 'W', 'var(--txt-2)');
+  html += '</div>';
+
+  // PV Strings
+  const activePV = pvStrings.filter(p => p.seen);
+  if (activePV.length > 0) {
+    html += '<div class="do-section-title">⚡ PV STRINGS</div><div class="do-grid">';
+    pvStrings.forEach((p, i) => {
+      if (!p.seen) return;
+      html += metricHTML(`String ${i+1} Voltage`, p.volt, 'V', c);
+      html += metricHTML(`String ${i+1} Current`, p.amp, 'A', c);
+      html += metricHTML(`String ${i+1} Power`, p.power, 'W', c);
+    });
+    html += '</div>';
+  }
+
+  // Raw PV-related topics
+  html += '<div class="do-section-title">📡 RAW MQTT DATA</div><div class="do-grid">';
+  Object.keys(rawMQTT).filter(k => k.includes('pv')||k.includes('solar')||k.includes('panel')).sort().forEach(k => {
+    html += metricHTML(k.split('/').pop().replace(/_/g,' '), rawMQTT[k], '', 'var(--txt-2)');
+  });
+  html += '</div>';
+
+  document.getElementById('do-pv-body').innerHTML = html;
+}
+
+function populateBattery() {
+  const s = state;
+  const c = 'var(--bat)';
+
+  // Build tabs
+  const active = batModules.filter(b => b.seen);
+  const tabsEl = document.getElementById('do-bat-tabs');
+  let tabHTML = `<button class="do-tab ${activeDetailBat===0?'active':''}" onclick="activeDetailBat=0;populateBattery()">ALL</button>`;
+  for (let i = 0; i < 15; i++) {
+    if (batModules[i].seen) {
+      tabHTML += `<button class="do-tab ${activeDetailBat===i+1?'active':''}" onclick="activeDetailBat=${i+1};populateBattery()">BAT ${i+1}</button>`;
+    }
+  }
+  tabsEl.innerHTML = tabHTML;
+
+  let html = '';
+  if (activeDetailBat === 0) {
+    // Combined view
+    html += '<div class="do-section-title">🔋 SYSTEM TOTALS</div><div class="do-grid">';
+    html += metricHTML('Total SOC', s.soc, '%', c);
+    html += metricHTML('Total Voltage', s.bVolt, 'V', c);
+    html += metricHTML('Total Current', s.bAmp, 'A', c);
+    html += metricHTML('Total Power', s.bPower, 'W', c);
+    html += metricHTML('Temperature', s.bTemp, '°F', '#ff8c69');
+    const dir = s.bPower > 10 ? 'CHARGING' : s.bPower < -10 ? 'DISCHARGING' : 'IDLE';
+    html += `<div class="do-metric"><div class="do-metric-label">Status</div><div class="do-status-badge ${s.bPower>10?'ok':s.bPower<-10?'warn':'ok'}">${dir}</div></div>`;
+    html += '</div>';
+
+    // All modules summary
+    if (active.length > 0) {
+      html += '<div class="do-section-title">📦 BATTERY MODULES (' + active.length + ' detected)</div><div class="do-grid">';
+      batModules.forEach((b, i) => {
+        if (!b.seen) return;
+        const soc = b.soc !== null ? b.soc.toFixed(0)+'%' : '—';
+        const v = b.volt !== null ? b.volt.toFixed(1)+'V' : '—';
+        const t = b.temp !== null ? b.temp.toFixed(0)+'°F' : '—';
+        html += `<div class="do-metric" style="cursor:pointer" onclick="activeDetailBat=${i+1};populateBattery()"><div class="do-metric-label">Battery ${i+1}</div><div class="do-metric-val" style="color:var(--bat)">${soc}</div><div class="do-metric-unit">${v} · ${t}</div></div>`;
+      });
+      html += '</div>';
+    }
+  } else {
+    // Single module view
+    const idx = activeDetailBat - 1;
+    const b = idx < 2 ? state.bat[idx] : batModules[idx];
+    html += `<div class="do-section-title">🔋 BATTERY ${activeDetailBat}</div><div class="do-grid">`;
+    html += metricHTML('State of Charge', b.soc, '%', c);
+    html += metricHTML('Voltage', b.volt, 'V', c);
+    html += metricHTML('Current', b.amp, 'A', c);
+    html += metricHTML('Power', b.power, 'W', c);
+    html += metricHTML('Temperature', b.temp, '°F', '#ff8c69');
+    html += '</div>';
+  }
+
+  // Raw battery topics
+  html += '<div class="do-section-title">📡 RAW MQTT DATA</div><div class="do-grid">';
+  Object.keys(rawMQTT).filter(k => k.includes('battery')).sort().forEach(k => {
+    html += metricHTML(k.split('/').pop().replace(/_/g,' '), rawMQTT[k], '', 'var(--txt-2)');
+  });
+  html += '</div>';
+
+  document.getElementById('do-battery-body').innerHTML = html;
+}
+
+function populateGrid() {
+  const s = state;
+  const c = 'var(--grd)';
+  let html = '<div class="do-section-title">⚡ GRID STATUS</div><div class="do-grid">';
+  const online = s.gVolt !== null && s.gVolt >= cfg.gridVMin;
+  html += `<div class="do-metric"><div class="do-metric-label">Grid Status</div><div class="do-status-badge ${online?'ok':'err'}">${online?'ONLINE':'OFFLINE'}</div></div>`;
+  html += metricHTML('Grid Power', s.grid, 'W', c);
+  html += metricHTML('Grid Voltage', s.gVolt, 'V', c);
+  html += metricHTML('Grid Frequency', s.gFreq, 'Hz', c);
+  const dir = s.grid > 10 ? 'IMPORTING' : s.grid < -10 ? 'EXPORTING' : 'IDLE';
+  html += `<div class="do-metric"><div class="do-metric-label">Direction</div><div class="do-status-badge ${s.grid>10?'warn':s.grid<-10?'ok':'ok'}">${dir}</div></div>`;
+  html += '</div>';
+
+  // Grid phases
+  const activePhases = gridPhases.filter(p => p.seen);
+  if (activePhases.length > 0) {
+    html += '<div class="do-section-title">⚡ VOLTAGE LINES / PHASES</div><div class="do-grid">';
+    gridPhases.forEach((p, i) => {
+      if (!p.seen) return;
+      html += metricHTML(`L${i+1} Voltage`, p.volt, 'V', c);
+      html += metricHTML(`L${i+1} Power`, p.power, 'W', c);
+      html += metricHTML(`L${i+1} Current`, p.current, 'A', c);
+      if (p.freq !== null) html += metricHTML(`L${i+1} Frequency`, p.freq, 'Hz', c);
+    });
+    html += '</div>';
+  }
+
+  // Raw grid topics
+  html += '<div class="do-section-title">📡 RAW MQTT DATA</div><div class="do-grid">';
+  Object.keys(rawMQTT).filter(k => k.includes('grid')).sort().forEach(k => {
+    html += metricHTML(k.split('/').pop().replace(/_/g,' '), rawMQTT[k], '', 'var(--txt-2)');
+  });
+  html += '</div>';
+
+  document.getElementById('do-grid-body').innerHTML = html;
+}
+
+function populateLoad() {
+  const s = state;
+  const c = 'var(--load)';
+  let html = '<div class="do-section-title">🏠 LOAD OVERVIEW</div><div class="do-grid">';
+  html += metricHTML('Total Load', s.load, 'W', c);
+  const pct = (s.load && cfg.maxLoad) ? ((s.load / cfg.maxLoad) * 100) : null;
+  html += metricHTML('Load Capacity', pct, '% of rated', c);
+  html += metricHTML('Max Load Rating', cfg.maxLoad, 'W', 'var(--txt-2)');
+  html += metricHTML('L1 Load', loadData.l1, 'W', c);
+  html += metricHTML('L2 Load', loadData.l2, 'W', c);
+  html += metricHTML('Apparent Power', loadData.apparent, 'VA', c);
+  html += metricHTML('Power Factor', loadData.pf, '', c);
+  html += '</div>';
+
+  // Power sources breakdown
+  html += '<div class="do-section-title">⚡ POWER SOURCE BREAKDOWN</div><div class="do-grid">';
+  html += metricHTML('From Solar', s.pv, 'W', 'var(--sol)');
+  html += metricHTML('From Battery', s.bPower !== null && s.bPower < 0 ? Math.abs(s.bPower) : 0, 'W', 'var(--bat)');
+  html += metricHTML('From Grid', s.grid !== null && s.grid > 0 ? s.grid : 0, 'W', 'var(--grd)');
+  html += '</div>';
+
+  // Raw load topics
+  html += '<div class="do-section-title">📡 RAW MQTT DATA</div><div class="do-grid">';
+  Object.keys(rawMQTT).filter(k => k.includes('load')||k.includes('consumption')).sort().forEach(k => {
+    html += metricHTML(k.split('/').pop().replace(/_/g,' '), rawMQTT[k], '', 'var(--txt-2)');
+  });
+  html += '</div>';
+
+  document.getElementById('do-load-body').innerHTML = html;
+}
+
+function populateSolArk() {
+  const c = 'var(--sol)';
+  // Build tabs for detected inverters
+  const activeInv = invUnits.filter(u => u.seen);
+  const tabsEl = document.getElementById('do-inv-tabs');
+  let tabHTML = `<button class="do-tab ${activeDetailInv===0?'active':''}" onclick="activeDetailInv=0;populateSolArk()">SYSTEM</button>`;
+  invUnits.forEach((u, i) => {
+    if (u.seen) tabHTML += `<button class="do-tab ${activeDetailInv===i+1?'active':''}" onclick="activeDetailInv=${i+1};populateSolArk()">UNIT ${i+1}</button>`;
+  });
+  tabsEl.innerHTML = tabHTML;
+
+  let html = '';
+  if (activeDetailInv === 0) {
+    // System overview
+    html += '<div class="do-section-title">⚡ SOL-ARK SYSTEM OVERVIEW</div><div class="do-grid">';
+    html += metricHTML('Active Inverters', activeInv.length || 'Detecting...', 'units', c);
+    html += metricHTML('System PV Power', state.pv, 'W', 'var(--sol)');
+    html += metricHTML('System Load', state.load, 'W', 'var(--load)');
+    html += metricHTML('Grid Power', state.grid, 'W', 'var(--grd)');
+    html += metricHTML('Battery Power', state.bPower, 'W', 'var(--bat)');
+    html += metricHTML('Inverter Temp', state.iTemp, '°F', '#ff8c69');
+    html += '</div>';
+
+    // Detected inverter cards
+    if (activeInv.length > 0) {
+      html += '<div class="do-section-title">📦 INVERTER UNITS (' + activeInv.length + ' of 12 max)</div><div class="do-grid">';
+      invUnits.forEach((u, i) => {
+        if (!u.seen) return;
+        html += `<div class="do-metric" style="cursor:pointer" onclick="activeDetailInv=${i+1};populateSolArk()"><div class="do-metric-label">Inverter ${i+1}</div><div class="do-metric-val" style="color:var(--sol)">${u.model||'Sol-Ark'}</div><div class="do-metric-unit">${u.serial||'Detecting...'}</div></div>`;
+      });
+      html += '</div>';
+    }
+  } else {
+    // Single inverter detail
+    const idx = activeDetailInv - 1;
+    const u = invUnits[idx];
+    html += `<div class="do-section-title">⚡ INVERTER ${activeDetailInv}</div><div class="do-grid">`;
+    html += metricHTML('Model', u.model || 'Sol-Ark', '', c);
+    html += metricHTML('Serial Number', u.serial || '—', '', c);
+    html += metricHTML('Firmware', u.firmware || '—', '', 'var(--txt-2)');
+    html += metricHTML('Install Date', u.installDate || '—', '', 'var(--txt-2)');
+    html += metricHTML('Temperature', u.temp, '°F', '#ff8c69');
+    html += metricHTML('Power Output', u.power, 'W', c);
+    html += '</div>';
+  }
+
+  // All inverter/device raw MQTT topics
+  html += '<div class="do-section-title">📡 RAW MQTT DATA</div><div class="do-grid">';
+  Object.keys(rawMQTT).filter(k => k.includes('inverter')||k.includes('device_mode')||k.includes('serial')||k.includes('model')||k.includes('firmware')).sort().forEach(k => {
+    html += metricHTML(k.split('/').pop().replace(/_/g,' '), rawMQTT[k], '', 'var(--txt-2)');
+  });
+  html += '</div>';
+
+  document.getElementById('do-solark-body').innerHTML = html;
+}
+
+// ─── INDEXEDDB HISTORY ENGINE (25-year tiered storage) ────────────────────────
+/*
+  Tier 1 "raw"    : every ~30s snapshot, kept 48 hours
+  Tier 2 "min5"   : 5-minute averages, kept 90 days
+  Tier 3 "hourly" : 1-hour averages, kept 2 years
+  Tier 4 "daily"  : daily avg/min/max, kept 25+ years (never auto-purged)
+*/
+const DB_NAME = 'SunFusionHistory';
+const DB_VER = 1;
+const FIELDS = ['pv','soc','bPower','bVolt','bAmp','bTemp','grid','gVolt','gFreq','load','pvVolt','pvAmp','iTemp'];
+const FIELD_UNITS = {pv:'W',soc:'%',bPower:'W',bVolt:'V',bAmp:'A',bTemp:'°F',grid:'W',gVolt:'V',gFreq:'Hz',load:'W',pvVolt:'V',pvAmp:'A',iTemp:'°F'};
+const FIELD_COLORS = {pv:'#ffb627',soc:'#00e5a0',bPower:'#00e5a0',bVolt:'#00e5a0',bAmp:'#00e5a0',bTemp:'#ff8c69',grid:'#38b6ff',gVolt:'#38b6ff',gFreq:'#38b6ff',load:'#c084fc',pvVolt:'#ffb627',pvAmp:'#ffb627',iTemp:'#ff8c69'};
+let histDB = null;
+let histRange = '24h';
+let lastRecordT = 0;
+let min5Buf = []; // buffer for 5-min aggregation
+let hourBuf = []; // buffer for hourly aggregation
+
+function openHistDB() {
+  return new Promise((resolve,reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      // Raw: timestamp index
+      if(!db.objectStoreNames.contains('raw')) {
+        const r = db.createObjectStore('raw', {keyPath:'ts'});
+        r.createIndex('ts','ts',{unique:true});
+      }
+      // 5-min averages
+      if(!db.objectStoreNames.contains('min5')) {
+        const m = db.createObjectStore('min5', {keyPath:'ts'});
+        m.createIndex('ts','ts',{unique:true});
+      }
+      // Hourly averages
+      if(!db.objectStoreNames.contains('hourly')) {
+        const h = db.createObjectStore('hourly', {keyPath:'ts'});
+        h.createIndex('ts','ts',{unique:true});
+      }
+      // Daily averages (25+ years)
+      if(!db.objectStoreNames.contains('daily')) {
+        const d = db.createObjectStore('daily', {keyPath:'ts'});
+        d.createIndex('ts','ts',{unique:true});
+      }
+    };
+    req.onsuccess = (e) => { histDB = e.target.result; resolve(histDB); };
+    req.onerror = (e) => { log('IndexedDB error: '+e.target.error,'e'); reject(e.target.error); };
+  });
+}
+
+function recordSnapshot() {
+  if(!histDB) return;
+  const now = Date.now();
+  if(now - lastRecordT < 30000) return; // max once per 30s
+  lastRecordT = now;
+
+  const s = state;
+  // Only record if we have at least some data
+  if(s.pv === null && s.soc === null && s.grid === null) return;
+
+  const rec = {ts: now};
+  FIELDS.forEach(f => { rec[f] = s[f]; });
+
+  try {
+    const tx = histDB.transaction('raw','readwrite');
+    tx.objectStore('raw').put(rec);
+    min5Buf.push(rec);
+    hourBuf.push(rec);
+  } catch(e) { /* silent */ }
+}
+
+function aggregate5Min() {
+  if(!histDB || min5Buf.length === 0) return;
+  const avg = {ts: Math.floor(Date.now() / 300000) * 300000}; // round to 5-min
+  FIELDS.forEach(f => {
+    const vals = min5Buf.map(r=>r[f]).filter(v=>v!==null&&v!==undefined);
+    avg[f] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+  min5Buf = [];
+  try {
+    const tx = histDB.transaction('min5','readwrite');
+    tx.objectStore('min5').put(avg);
+  } catch(e) {}
+}
+
+function aggregateHourly() {
+  if(!histDB || hourBuf.length === 0) return;
+  const avg = {ts: Math.floor(Date.now() / 3600000) * 3600000}; // round to hour
+  FIELDS.forEach(f => {
+    const vals = hourBuf.map(r=>r[f]).filter(v=>v!==null&&v!==undefined);
+    avg[f] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    avg[f+'_min'] = vals.length ? Math.min(...vals) : null;
+    avg[f+'_max'] = vals.length ? Math.max(...vals) : null;
+  });
+  hourBuf = [];
+  try {
+    const tx = histDB.transaction('hourly','readwrite');
+    tx.objectStore('hourly').put(avg);
+  } catch(e) {}
+}
+
+function aggregateDaily() {
+  if(!histDB) return;
+  // Read today's hourly records and compute daily summary
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const dayTs = dayStart.getTime();
+  const yesterday = dayTs - 86400000;
+
+  const tx = histDB.transaction('hourly','readonly');
+  const store = tx.objectStore('hourly');
+  const range = IDBKeyRange.bound(yesterday, dayTs - 1);
+  const req = store.index('ts').getAll(range);
+  req.onsuccess = () => {
+    const recs = req.result;
+    if(recs.length === 0) return;
+    const daily = {ts: yesterday};
+    FIELDS.forEach(f => {
+      const vals = recs.map(r=>r[f]).filter(v=>v!==null&&v!==undefined);
+      daily[f+'_avg'] = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+      daily[f+'_min'] = vals.length ? Math.min(...vals) : null;
+      daily[f+'_max'] = vals.length ? Math.max(...vals) : null;
+      // Also store the average as the main value for charting
+      daily[f] = daily[f+'_avg'];
+    });
+    daily.samples = recs.length;
+    try {
+      const wtx = histDB.transaction('daily','readwrite');
+      wtx.objectStore('daily').put(daily);
+      log('📊 Daily summary saved: '+recs.length+' hourly samples','ok');
+    } catch(e) {}
+  };
+}
+
+function purgeOldData() {
+  if(!histDB) return;
+  const now = Date.now();
+  const purges = [
+    {store:'raw',   maxAge: 48 * 3600000},       // 48 hours
+    {store:'min5',  maxAge: 90 * 86400000},       // 90 days
+    {store:'hourly',maxAge: 2 * 365 * 86400000},  // 2 years
+    // daily: never purged (25+ year retention)
+  ];
+  purges.forEach(p => {
+    try {
+      const tx = histDB.transaction(p.store,'readwrite');
+      const store = tx.objectStore(p.store);
+      const cutoff = now - p.maxAge;
+      const range = IDBKeyRange.upperBound(cutoff);
+      store.index('ts').openCursor(range).onsuccess = (e) => {
+        const cursor = e.target.result;
+        if(cursor) { cursor.delete(); cursor.continue(); }
+      };
+    } catch(e) {}
+  });
+}
+
+function getDBStats() {
+  return new Promise((resolve) => {
+    if(!histDB) { resolve({}); return; }
+    const stats = {};
+    const stores = ['raw','min5','hourly','daily'];
+    let done = 0;
+    stores.forEach(s => {
+      try {
+        const tx = histDB.transaction(s,'readonly');
+        const req = tx.objectStore(s).count();
+        req.onsuccess = () => { stats[s] = req.result; if(++done===4) resolve(stats); };
+        req.onerror = () => { stats[s] = 0; if(++done===4) resolve(stats); };
+      } catch(e) { stats[s] = 0; if(++done===4) resolve(stats); }
+    });
+  });
+}
+
+// ─── HISTORY CHART & UI ──────────────────────────────────────────────────────
+function toggleHistPanel() {
+  const panel = document.getElementById('hist-panel');
+  panel.classList.toggle('open');
+  if(panel.classList.contains('open')) loadHistChart();
+}
+
+function setHistRange(range) {
+  histRange = range;
+  document.querySelectorAll('.hist-range-btn').forEach(b => b.classList.toggle('active', b.textContent === range.toUpperCase()));
+  loadHistChart();
+}
+
+function getHistStore(range) {
+  switch(range) {
+    case '24h': return 'raw';
+    case '7d': case '30d': return 'min5';
+    case '1y': case '5y': return 'hourly';
+    case 'all': return 'daily';
+    default: return 'raw';
+  }
+}
+
+function getHistTimeRange(range) {
+  const now = Date.now();
+  switch(range) {
+    case '24h': return now - 86400000;
+    case '7d':  return now - 7 * 86400000;
+    case '30d': return now - 30 * 86400000;
+    case '1y':  return now - 365 * 86400000;
+    case '5y':  return now - 5 * 365 * 86400000;
+    case 'all': return 0;
+    default: return now - 86400000;
+  }
+}
+
+async function loadHistChart() {
+  if(!histDB) return;
+  const metric = document.getElementById('hist-metric').value;
+  const store = getHistStore(histRange);
+  const from = getHistTimeRange(histRange);
+  const loading = document.getElementById('hist-loading');
+  loading.style.display = 'block';
+
+  try {
+    const tx = histDB.transaction(store,'readonly');
+    const idx = tx.objectStore(store).index('ts');
+    const range = from > 0 ? IDBKeyRange.lowerBound(from) : undefined;
+    const req = range ? idx.getAll(range) : idx.getAll();
+
+    req.onsuccess = () => {
+      const data = req.result;
+      loading.style.display = 'none';
+      renderHistChart(data, metric);
+      renderHistStats(data, metric);
+      updateDBStatsDisplay();
+    };
+    req.onerror = () => { loading.style.display = 'none'; };
+  } catch(e) { loading.style.display = 'none'; }
+}
+
+function renderHistChart(data, metric) {
+  const svg = document.getElementById('hist-chart-svg');
+  const wrap = document.getElementById('hist-chart-wrap');
+  const W = wrap.clientWidth || 800;
+  const H = wrap.clientHeight || 300;
+  const PAD = {top:20, right:20, bottom:30, left:55};
+  const cW = W - PAD.left - PAD.right;
+  const cH = H - PAD.top - PAD.bottom;
+
+  // Extract values
+  const pts = data.map(d => ({t:d.ts, v:d[metric]})).filter(p => p.v !== null && p.v !== undefined);
+
+  if(pts.length < 2) {
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--txt-3)" font-family="DM Mono,monospace" font-size="11" letter-spacing="2">No data for this range</text>`;
+    document.getElementById('hist-stats').innerHTML = '';
+    return;
+  }
+
+  const tMin = pts[0].t, tMax = pts[pts.length-1].t;
+  const tRange = Math.max(tMax - tMin, 1);
+  const vals = pts.map(p=>p.v);
+  let vMin = Math.min(...vals), vMax = Math.max(...vals);
+  if(vMin === vMax) { vMin -= 1; vMax += 1; }
+  const vPad = (vMax - vMin) * 0.08;
+  vMin -= vPad; vMax += vPad;
+  const vRange = vMax - vMin;
+  const color = FIELD_COLORS[metric] || '#ffb627';
+
+  // Downsample if > 2000 points
+  let drawPts = pts;
+  if(pts.length > 2000) {
+    const step = Math.ceil(pts.length / 2000);
+    drawPts = pts.filter((_,i) => i % step === 0);
+  }
+
+  // Build SVG
+  let svgHTML = '';
+
+  // Grid lines (5 horizontal)
+  for(let i=0; i<=5; i++) {
+    const y = PAD.top + (i/5) * cH;
+    const v = vMax - (i/5) * vRange;
+    svgHTML += `<line x1="${PAD.left}" y1="${y}" x2="${W-PAD.right}" y2="${y}" class="hist-chart-grid"/>`;
+    svgHTML += `<text x="${PAD.left-6}" y="${y+3}" text-anchor="end" class="hist-chart-val-label">${v>=1000?(v/1000).toFixed(1)+'k':v.toFixed(v<10?2:0)}</text>`;
+  }
+
+  // Time labels (6 across bottom)
+  for(let i=0; i<=5; i++) {
+    const x = PAD.left + (i/5) * cW;
+    const t = new Date(tMin + (i/5) * tRange);
+    let label;
+    if(histRange==='24h') label = t.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+    else if(histRange==='7d'||histRange==='30d') label = t.toLocaleDateString([],{month:'short',day:'numeric'});
+    else label = t.toLocaleDateString([],{month:'short',year:'2-digit'});
+    svgHTML += `<text x="${x}" y="${H-5}" text-anchor="middle" class="hist-chart-label">${label}</text>`;
+  }
+
+  // Line path
+  const linePoints = drawPts.map(p => {
+    const x = PAD.left + ((p.t - tMin) / tRange) * cW;
+    const y = PAD.top + ((vMax - p.v) / vRange) * cH;
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+
+  svgHTML += `<polyline points="${linePoints}" class="hist-chart-line" style="stroke:${color}"/>`;
+  svgHTML += `<polygon points="${PAD.left+','+( PAD.top+cH)} ${linePoints} ${(PAD.left+cW).toFixed(1)+','+(PAD.top+cH)}" class="hist-chart-fill" style="fill:${color}"/>`;
+
+  // Unit label
+  const unit = FIELD_UNITS[metric] || '';
+  svgHTML += `<text x="${PAD.left+4}" y="${PAD.top-6}" class="hist-chart-label" fill="${color}">${metric.toUpperCase()} (${unit})</text>`;
+
+  svg.innerHTML = svgHTML;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // Mouse hover for crosshair/tooltip
+  setupChartHover(wrap, drawPts, metric, tMin, tRange, vMin, vMax, vRange, PAD, cW, cH, color);
+}
+
+function setupChartHover(wrap, pts, metric, tMin, tRange, vMin, vMax, vRange, PAD, cW, cH, color) {
+  const crosshair = document.getElementById('hist-crosshair');
+  const tooltip = document.getElementById('hist-tooltip');
+  const unit = FIELD_UNITS[metric] || '';
+
+  wrap.onmousemove = (e) => {
+    const rect = wrap.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    if(mx < PAD.left || mx > PAD.left + cW) { crosshair.style.display='none'; tooltip.style.display='none'; return; }
+
+    crosshair.style.display='block'; crosshair.style.left = mx+'px';
+    const tAt = tMin + ((mx - PAD.left) / cW) * tRange;
+    // Find nearest point
+    let best = pts[0], bestDist = Infinity;
+    for(const p of pts) { const d=Math.abs(p.t-tAt); if(d<bestDist){bestDist=d;best=p;} }
+
+    const dt = new Date(best.t);
+    let timeStr;
+    if(histRange==='24h') timeStr = dt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
+    else if(histRange==='7d'||histRange==='30d') timeStr = dt.toLocaleDateString([],{month:'short',day:'numeric'})+' '+dt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+    else timeStr = dt.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
+
+    tooltip.style.display='block';
+    tooltip.style.left = (mx + 12) + 'px';
+    if(mx > cW * 0.7) tooltip.style.left = (mx - 150) + 'px';
+    tooltip.innerHTML = `<span style="color:${color};font-weight:600">${best.v!==null?best.v.toFixed(2):'-'} ${unit}</span><br><span style="color:var(--txt-3)">${timeStr}</span>`;
+  };
+  wrap.onmouseleave = () => { crosshair.style.display='none'; tooltip.style.display='none'; };
+}
+
+function renderHistStats(data, metric) {
+  const container = document.getElementById('hist-stats');
+  const vals = data.map(d=>d[metric]).filter(v=>v!==null&&v!==undefined);
+  if(vals.length === 0) { container.innerHTML=''; return; }
+  const unit = FIELD_UNITS[metric]||'';
+  const color = FIELD_COLORS[metric]||'var(--sol)';
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const last = vals[vals.length-1];
+  const first = data[0].ts, latest = data[data.length-1].ts;
+  const spanMs = latest - first;
+  const spanLabel = spanMs > 365*86400000 ? (spanMs/365/86400000).toFixed(1)+' yrs' :
+                    spanMs > 86400000 ? (spanMs/86400000).toFixed(1)+' days' :
+                    (spanMs/3600000).toFixed(1)+' hrs';
+
+  container.innerHTML = `
+    <div class="hist-stat-card"><div class="hist-stat-label">Current</div><div class="hist-stat-val" style="color:${color}">${last.toFixed(1)}</div><div class="hist-stat-unit">${unit}</div></div>
+    <div class="hist-stat-card"><div class="hist-stat-label">Average</div><div class="hist-stat-val" style="color:${color}">${avg.toFixed(1)}</div><div class="hist-stat-unit">${unit}</div></div>
+    <div class="hist-stat-card"><div class="hist-stat-label">Minimum</div><div class="hist-stat-val" style="color:var(--grd)">${min.toFixed(1)}</div><div class="hist-stat-unit">${unit}</div></div>
+    <div class="hist-stat-card"><div class="hist-stat-label">Maximum</div><div class="hist-stat-val" style="color:var(--danger)">${max.toFixed(1)}</div><div class="hist-stat-unit">${unit}</div></div>
+    <div class="hist-stat-card"><div class="hist-stat-label">Samples</div><div class="hist-stat-val" style="color:var(--txt)">${vals.length.toLocaleString()}</div><div class="hist-stat-unit">records</div></div>
+    <div class="hist-stat-card"><div class="hist-stat-label">Time Span</div><div class="hist-stat-val" style="color:var(--txt)">${spanLabel}</div><div class="hist-stat-unit">covered</div></div>
+  `;
+}
+
+async function updateDBStatsDisplay() {
+  const stats = await getDBStats();
+  const el = document.getElementById('hist-db-stats');
+  el.innerHTML = `
+    <div class="hist-db-stat"><div class="hist-db-dot" style="background:var(--sol)"></div>Raw: ${(stats.raw||0).toLocaleString()}</div>
+    <div class="hist-db-stat"><div class="hist-db-dot" style="background:var(--bat)"></div>5min: ${(stats.min5||0).toLocaleString()}</div>
+    <div class="hist-db-stat"><div class="hist-db-dot" style="background:var(--grd)"></div>Hourly: ${(stats.hourly||0).toLocaleString()}</div>
+    <div class="hist-db-stat"><div class="hist-db-dot" style="background:var(--load)"></div>Daily: ${(stats.daily||0).toLocaleString()}</div>
+  `;
+}
+
+async function exportHistCSV() {
+  if(!histDB) return;
+  const metric = document.getElementById('hist-metric').value;
+  const store = getHistStore(histRange);
+  const from = getHistTimeRange(histRange);
+
+  const tx = histDB.transaction(store,'readonly');
+  const idx = tx.objectStore(store).index('ts');
+  const range = from > 0 ? IDBKeyRange.lowerBound(from) : undefined;
+  const req = range ? idx.getAll(range) : idx.getAll();
+
+  req.onsuccess = () => {
+    const data = req.result;
+    if(data.length === 0) { alert('No data to export'); return; }
+    // CSV header
+    let csv = 'Timestamp,Date,' + FIELDS.join(',') + '\n';
+    data.forEach(r => {
+      const dt = new Date(r.ts);
+      csv += r.ts + ',' + dt.toISOString() + ',' + FIELDS.map(f => r[f]!==null&&r[f]!==undefined?r[f].toFixed(2):'').join(',') + '\n';
+    });
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sunfusion_${store}_${histRange}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    log('📁 Exported '+data.length+' records to CSV','ok');
+  };
+}
+
+function purgeHistDB() {
+  if(!confirm('This will DELETE ALL historical data. This cannot be undone.\n\nAre you sure?')) return;
+  if(!histDB) return;
+  ['raw','min5','hourly','daily'].forEach(s => {
+    try { const tx = histDB.transaction(s,'readwrite'); tx.objectStore(s).clear(); } catch(e) {}
+  });
+  log('🗑 All history data purged','e');
+  loadHistChart();
+}
+
+// ─── ALERT ENGINE ─────────────────────────────────────────────────────────────
+const alerts = {
+  history: [],        // [{id, type, severity, icon, title, desc, time, resolved, resolvedTime}]
+  active: {},         // keyed by type — only one active alert per type
+  cooldowns: {},      // type → timestamp of last fire
+  counter: 0,
+  COOLDOWN_MS: 120000 // 2 min cooldown per alert type
+};
+
+const ALERT_DEFS = {
+  grid_fail:     { icon:'⚡', title:'GRID FAILURE',             severity:'critical' },
+  grid_down_50:  { icon:'⚠️', title:'GRID DOWN — CONSERVE',     severity:'warning' },
+  grid_down_30:  { icon:'🔋', title:'GRID DOWN — PRESERVE NOW', severity:'critical' },
+  grid_down_20:  { icon:'🚨', title:'GRID DOWN — POWER LOSS WARNING', severity:'critical' },
+  grid_down_10:  { icon:'🔴', title:'POWER LOSS IMMINENT',      severity:'critical' },
+  grid_voltage:  { icon:'⚡', title:'LOW GRID VOLTAGE',         severity:'critical' },
+  grid_freq:     { icon:'⚡', title:'GRID FREQUENCY ANOMALY',   severity:'warning' },
+  mqtt_lost:     { icon:'📡', title:'CONNECTION LOST',           severity:'critical' },
+  low_battery:   { icon:'🪫', title:'LOW BATTERY',               severity:'warning' },
+  bat_critical:  { icon:'🔋', title:'BATTERY CRITICAL',          severity:'critical' },
+  high_temp_inv: { icon:'🌡️', title:'INVERTER OVERTEMP',         severity:'critical' },
+  high_temp_bat: { icon:'🌡️', title:'BATTERY OVERTEMP',          severity:'critical' },
+  wx_prod_30:    { icon:'☁️', title:'PV PRODUCTION -30%',         severity:'info' },
+  wx_prod_50:    { icon:'☁️', title:'PV PRODUCTION -50%',         severity:'warning' },
+  wx_prod_80:    { icon:'🌧️', title:'PV PRODUCTION -80%',         severity:'warning' },
+  wx_prod_95:    { icon:'⛈️', title:'PV PRODUCTION -95%',         severity:'critical' },
+  wx_extreme_temp:{icon:'🌡️', title:'EXTREME TEMPERATURE',       severity:'warning' },
+};
+
+function fireAlert(type, desc) {
+  const def = ALERT_DEFS[type];
+  if (!def) return;
+
+  // Check cooldown
+  const now = Date.now();
+  if (alerts.cooldowns[type] && now - alerts.cooldowns[type] < alerts.COOLDOWN_MS) return;
+  alerts.cooldowns[type] = now;
+
+  // Check if same type already active & unresolved
+  if (alerts.active[type] && !alerts.active[type].resolved) {
+    alerts.active[type].desc = desc; // update message
+    alerts.active[type].time = new Date();
+    updateAlertUI();
+    return;
+  }
+
+  const alert = {
+    id: ++alerts.counter,
+    type, severity: def.severity, icon: def.icon,
+    title: def.title, desc,
+    time: new Date(), resolved: false, resolvedTime: null
+  };
+
+  alerts.history.unshift(alert);
+  alerts.active[type] = alert;
+  if (alerts.history.length > 50) alerts.history.pop();
+
+  log('🚨 ALERT: ' + def.title + ' — ' + desc, 'e');
+
+  // Audio
+  if (cfg.alertAudio) playAlertSound(def.severity);
+
+  updateAlertUI();
+  showBanner(alert);
+}
+
+function resolveAlert(type) {
+  if (alerts.active[type] && !alerts.active[type].resolved) {
+    alerts.active[type].resolved = true;
+    alerts.active[type].resolvedTime = new Date();
+    log('✓ RESOLVED: ' + ALERT_DEFS[type].title, 'ok');
+    updateAlertUI();
+  }
+}
+
+function playAlertSound(severity) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    gain.gain.value = 0.15;
+
+    if (severity === 'critical') {
+      osc.frequency.value = 880; osc.type = 'square';
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+      osc.start(); osc.stop(ctx.currentTime + 0.6);
+      // Second beep
+      setTimeout(() => {
+        const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+        o2.connect(g2); g2.connect(ctx.destination);
+        o2.frequency.value = 1100; o2.type = 'square'; g2.gain.value = 0.12;
+        g2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        o2.start(); o2.stop(ctx.currentTime + 0.4);
+      }, 300);
+    } else {
+      osc.frequency.value = 660; osc.type = 'sine';
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch(e) {}
+}
+
+function showBanner(alert) {
+  const banner = document.getElementById('alert-banner');
+  const inner  = document.getElementById('alert-banner-inner');
+  const icon   = document.getElementById('alert-banner-icon');
+  const msg    = document.getElementById('alert-banner-msg');
+  const time   = document.getElementById('alert-banner-time');
+
+  inner.className = 'alert-banner-inner ' + alert.severity;
+  icon.textContent = alert.icon;
+  msg.innerHTML = '<strong>' + alert.title + '</strong> — ' + alert.desc;
+  time.textContent = alert.time.toLocaleTimeString();
+  banner.classList.add('show');
+
+  // Auto-hide info alerts after 15s, warnings 30s, critical stays
+  if (alert.severity === 'info') setTimeout(dismissBanner, 15000);
+  else if (alert.severity === 'warning') setTimeout(dismissBanner, 30000);
+}
+
+function dismissBanner() {
+  document.getElementById('alert-banner').classList.remove('show');
+}
+
+function updateAlertUI() {
+  const activeCount = Object.values(alerts.active).filter(a => !a.resolved).length;
+  const badge = document.getElementById('alert-badge');
+  if (activeCount > 0) {
+    badge.textContent = activeCount;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+  renderAlertHistory();
+}
+
+function renderAlertHistory() {
+  const list = document.getElementById('alert-history-list');
+  const empty = document.getElementById('alert-empty');
+
+  if (alerts.history.length === 0) {
+    empty.style.display = 'block';
+    list.querySelectorAll('.alert-history-item').forEach(el => el.remove());
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Rebuild list
+  list.querySelectorAll('.alert-history-item').forEach(el => el.remove());
+  alerts.history.forEach(a => {
+    const el = document.createElement('div');
+    el.className = 'alert-history-item ' + a.severity + (a.resolved ? ' resolved' : '');
+    el.innerHTML = `
+      <div class="ah-icon">${a.icon}</div>
+      <div class="ah-body">
+        <div class="ah-title" style="color:${a.severity==='critical'?'var(--danger)':a.severity==='warning'?'var(--warn)':'var(--grd)'}">${a.title}</div>
+        <div class="ah-desc">${a.desc}</div>
+        <div class="ah-time">${a.time.toLocaleTimeString()} · ${a.time.toLocaleDateString()}</div>
+        ${a.resolved ? '<div class="ah-resolved">✓ Resolved ' + a.resolvedTime.toLocaleTimeString() + '</div>' : ''}
+      </div>
+    `;
+    list.appendChild(el);
+  });
+}
+
+function clearAlertHistory() {
+  alerts.history = [];
+  alerts.active = {};
+  alerts.cooldowns = {};
+  dismissBanner();
+  updateAlertUI();
+}
+
+function toggleAlertPanel() {
+  document.getElementById('alert-panel').classList.toggle('open');
+}
+
+// ─── ALERT CHECKS ─────────────────────────────────────────────────────────────
+let gridWasOnline = null;     // track previous grid state
+let gridZeroCount = 0;        // consecutive zero readings
+let mqttConnected = false;
+let gridIsDown = false;       // current grid state
+let gridDown20Timer = null;   // 5-min repeat timer for 20% SOC alert
+
+const GRID_SOC_ALERTS = ['grid_down_50','grid_down_30','grid_down_20','grid_down_10'];
+
+function clearGridSOCAlerts() {
+  GRID_SOC_ALERTS.forEach(t => resolveAlert(t));
+  if (gridDown20Timer) { clearInterval(gridDown20Timer); gridDown20Timer = null; }
+}
+
+function checkSystemAlerts() {
+  const s = state;
+
+  // ── GRID FAILURE DETECTION ──
+  if (cfg.alertGrid) {
+    if (s.grid !== null && s.gVolt !== null) {
+      const down = Math.abs(s.grid) < 5 && s.gVolt < cfg.gridVMin;
+      if (down) {
+        gridZeroCount++;
+        if (gridZeroCount >= 3) {
+          gridIsDown = true;
+          gridWasOnline = false;
+          fireAlert('grid_fail', `Grid power is 0W and voltage at ${s.gVolt.toFixed(0)}V — grid outage detected. Conserve power — system running on battery backup.`);
+        }
+      } else {
+        gridZeroCount = 0;
+        if (gridWasOnline === false) {
+          gridIsDown = false;
+          resolveAlert('grid_fail');
+          resolveAlert('grid_voltage');
+          clearGridSOCAlerts();
+          gridWasOnline = true;
+          log('⚡ Grid restored — all grid-down alerts cleared','ok');
+        }
+      }
+    }
+
+    // Low grid voltage (brownout — not full outage)
+    if (s.gVolt !== null && s.gVolt > 10 && s.gVolt < cfg.gridVMin) {
+      fireAlert('grid_voltage', `Grid voltage at ${s.gVolt.toFixed(1)}V — below ${cfg.gridVMin}V threshold. Possible brownout.`);
+    } else if (s.gVolt !== null && s.gVolt >= cfg.gridVMin) {
+      resolveAlert('grid_voltage');
+    }
+
+    // Grid frequency anomaly (Sol-Ark normal range 55–65 Hz)
+    if (s.gFreq !== null) {
+      if (s.gFreq < 55 || s.gFreq > 65) {
+        fireAlert('grid_freq', `Grid frequency at ${s.gFreq.toFixed(2)}Hz — outside normal 55–65Hz range.`);
+      } else if (s.gFreq >= 56 && s.gFreq <= 64) {
+        resolveAlert('grid_freq');
+      }
+    }
+  }
+
+  // ── GRID-DOWN + SOC TIERED ALERTS ──
+  // These only fire when the grid is confirmed down
+  if (gridIsDown && s.soc !== null) {
+    const soc = Math.round(s.soc);
+
+    if (soc <= 10) {
+      // ⛔ 10% — POWER LOSS IMMINENT (every check, bypass cooldown)
+      resolveAlert('grid_down_50'); resolveAlert('grid_down_30'); resolveAlert('grid_down_20');
+      if (gridDown20Timer) { clearInterval(gridDown20Timer); gridDown20Timer = null; }
+      alerts.cooldowns['grid_down_10'] = 0; // always fire
+      fireAlert('grid_down_10', `🔴 POWER LOSS IMMINENT — Battery at ${soc}%. Grid is DOWN. Prepare for complete power loss. Shut down non-essential equipment NOW.`);
+
+    } else if (soc <= 20) {
+      // 🚨 20% — Repeat every 5 minutes
+      resolveAlert('grid_down_50'); resolveAlert('grid_down_30'); resolveAlert('grid_down_10');
+      alerts.cooldowns['grid_down_20'] = 0; // force fire now
+      fireAlert('grid_down_20', `🚨 GRID DOWN — Battery at ${soc}%. You are going to lose power. Reduce all loads immediately. Turn off non-essential devices.`);
+      // Set up 5-min repeat if not already running
+      if (!gridDown20Timer) {
+        gridDown20Timer = setInterval(() => {
+          if (!gridIsDown || state.soc === null || state.soc > 20 || state.soc <= 10) {
+            clearInterval(gridDown20Timer); gridDown20Timer = null; return;
+          }
+          alerts.cooldowns['grid_down_20'] = 0;
+          fireAlert('grid_down_20', `🚨 GRID STILL DOWN — Battery at ${Math.round(state.soc)}%. Power loss approaching. Reduce all loads NOW.`);
+          if (cfg.alertAudio) playAlertSound('critical');
+        }, 5 * 60 * 1000); // every 5 minutes
+      }
+
+    } else if (soc <= 30) {
+      // 🔋 30% — Persistent preserve warning
+      resolveAlert('grid_down_50'); resolveAlert('grid_down_20'); resolveAlert('grid_down_10');
+      if (gridDown20Timer) { clearInterval(gridDown20Timer); gridDown20Timer = null; }
+      fireAlert('grid_down_30', `🔋 GRID DOWN — Battery at ${soc}%. PRESERVE POWER NOW. Turn off all non-essential loads. Monitor battery closely.`);
+
+    } else if (soc <= 50) {
+      // ⚠️ 50% — Be cautious
+      resolveAlert('grid_down_30'); resolveAlert('grid_down_20'); resolveAlert('grid_down_10');
+      if (gridDown20Timer) { clearInterval(gridDown20Timer); gridDown20Timer = null; }
+      fireAlert('grid_down_50', `⚠️ Grid is DOWN — Battery at ${soc}%. Be cautious with power usage. Reduce non-essential loads to extend battery life.`);
+
+    } else {
+      // SOC > 50% while grid down — just the grid_fail alert is enough
+      clearGridSOCAlerts();
+    }
+  }
+
+  // ── LOW BATTERY (independent of grid status) ──
+  if (cfg.alertLowBat && s.soc !== null && !gridIsDown) {
+    if (s.soc <= 10) {
+      fireAlert('bat_critical', `Battery at ${s.soc.toFixed(0)}% — CRITICAL. Shutdown imminent if load is not reduced.`);
+    } else if (s.soc <= cfg.lowBatPct) {
+      fireAlert('low_battery', `Battery at ${s.soc.toFixed(0)}% — below ${cfg.lowBatPct}% threshold.`);
+      resolveAlert('bat_critical');
+    } else {
+      resolveAlert('low_battery');
+      resolveAlert('bat_critical');
+    }
+  }
+
+  // ── HIGH TEMPERATURE ──
+  if (cfg.alertHighTemp) {
+    if (s.iTemp !== null && s.iTemp >= cfg.highTempF) {
+      fireAlert('high_temp_inv', `Inverter temperature at ${s.iTemp.toFixed(1)}°F — exceeds ${cfg.highTempF}°F limit. Check ventilation.`);
+    } else if (s.iTemp !== null && s.iTemp < cfg.highTempF - 10) {
+      resolveAlert('high_temp_inv');
+    }
+
+    if (s.bTemp !== null && s.bTemp >= cfg.highTempF) {
+      fireAlert('high_temp_bat', `Battery temperature at ${s.bTemp.toFixed(1)}°F — exceeds ${cfg.highTempF}°F limit. Check cooling.`);
+    } else if (s.bTemp !== null && s.bTemp < cfg.highTempF - 10) {
+      resolveAlert('high_temp_bat');
+    }
+  }
+}
+
+// ── PV PRODUCTION LOSS TIERS ──
+// ☀️ Sunny (clear)           =  0% loss → no alert
+// ⛅ Partly cloudy            =  5% loss → no alert
+// ☁️ Light gray clouds        = 30% loss → ALERT threshold
+// ☁️ Full overcast             = 50% loss → ALERT
+// 🌧️ Gray clouds + rain       = 80% loss → ALERT
+// ⛈️ Dark/rain/thunderstorms  = 95% loss → ALERT
+function getProductionLoss(weatherId, clouds) {
+  if (weatherId >= 200 && weatherId <= 232) return 95;  // thunderstorms
+  if (weatherId >= 762 && weatherId <= 781) return 95;  // tornado/hurricane
+  if ((weatherId >= 502 && weatherId <= 531) || weatherId === 511) return 80; // heavy rain
+  if (weatherId >= 602 && weatherId < 700) return 80;   // heavy snow/blizzard
+  if ((weatherId >= 300 && weatherId <= 321) || (weatherId >= 500 && weatherId <= 501)) return 80; // light rain/drizzle
+  if (weatherId >= 600 && weatherId <= 601) return 50;  // light snow
+  if (weatherId >= 700 && weatherId < 762) return 30;   // fog/mist/haze
+  if (weatherId === 804 || clouds >= 85) return 50;     // full overcast
+  if (weatherId === 803 || clouds >= 51) return 30;     // broken clouds
+  if (weatherId === 802 || clouds >= 25) return 5;      // scattered clouds
+  return 0; // clear / few clouds
+}
+
+function checkWeatherAlerts(forecasts) {
+  if (!cfg.alertWeather || !forecasts || !forecasts.length) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  // Only check daytime hours in next 12 hours (PV loss irrelevant at night)
+  const upcoming = forecasts.filter(f => {
+    if (f.dt < now || f.dt > now + 43200) return false;
+    // Check if it's a daytime period (has 'd' in icon code)
+    return f.weather[0].icon.includes('d');
+  });
+
+  if (upcoming.length === 0) return;
+
+  // Find worst production loss in upcoming daytime periods
+  let worstLoss = 0;
+  let worstPeriod = null;
+
+  for (const f of upcoming) {
+    const loss = getProductionLoss(f.weather[0].id, f.clouds.all);
+    if (loss > worstLoss) {
+      worstLoss = loss;
+      worstPeriod = f;
+    }
+  }
+
+  // Resolve any previous weather production alerts first
+  ['wx_prod_30','wx_prod_50','wx_prod_80','wx_prod_95'].forEach(t => resolveAlert(t));
+
+  // Only alert at ≥ 30% loss
+  if (worstLoss < 30 || !worstPeriod) return;
+
+  const dt = new Date(worstPeriod.dt * 1000);
+  const timeStr = dt.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  const desc = worstPeriod.weather[0].description;
+  const clouds = worstPeriod.clouds.all;
+  const wind = worstPeriod.wind.speed;
+  const expectedPV = 100 - worstLoss;
+
+  let alertType, message;
+
+  if (worstLoss >= 95) {
+    alertType = 'wx_prod_95';
+    message = `⛈️ ${desc} at ${timeStr} — expect ${worstLoss}% PV production loss. ☁${clouds}% cloud cover, ${wind.toFixed(0)}mph wind. Only ~${expectedPV}% output expected.`;
+  } else if (worstLoss >= 80) {
+    alertType = 'wx_prod_80';
+    message = `🌧️ ${desc} at ${timeStr} — expect ${worstLoss}% PV production loss. ☁${clouds}% cloud cover. Only ~${expectedPV}% output expected.`;
+  } else if (worstLoss >= 50) {
+    alertType = 'wx_prod_50';
+    message = `☁️ ${desc} at ${timeStr} — expect ${worstLoss}% PV production loss. ☁${clouds}% cloud cover. ~${expectedPV}% output expected.`;
+  } else {
+    alertType = 'wx_prod_30';
+    message = `☁️ ${desc} at ${timeStr} — expect ${worstLoss}% PV production loss. ☁${clouds}% cloud cover. ~${expectedPV}% output expected.`;
+  }
+
+  fireAlert(alertType, message);
+
+  // Extreme temps still checked separately
+  for (const f of upcoming) {
+    const temp = f.main.temp;
+    if (temp >= 110 || temp <= 10) {
+      const tStr = new Date(f.dt * 1000).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+      fireAlert('wx_extreme_temp', `${temp.toFixed(0)}°F at ${tStr}. ${temp >= 110 ? 'Extreme heat may affect inverter performance.' : 'Low temps may affect battery capacity.'}`);
+      break;
+    }
+  }
+}
+
+// ─── ALERT CONFIG TOGGLES ────────────────────────────────────────────────────
+function toggleSetting(key) {
+  const map = { audio:'alertAudio', grid:'alertGrid', weather:'alertWeather', lowbat:'alertLowBat', hightemp:'alertHighTemp' };
+  const cfgKey = map[key];
+  cfg[cfgKey] = !cfg[cfgKey];
+  document.getElementById('tgl-'+key).classList.toggle('on', cfg[cfgKey]);
+  saveCfg();
+}
+
+function loadAlertToggles() {
+  document.getElementById('tgl-audio').classList.toggle('on', cfg.alertAudio);
+  document.getElementById('tgl-grid').classList.toggle('on', cfg.alertGrid);
+  document.getElementById('tgl-weather').classList.toggle('on', cfg.alertWeather);
+  document.getElementById('tgl-lowbat').classList.toggle('on', cfg.alertLowBat);
+  document.getElementById('tgl-hightemp').classList.toggle('on', cfg.alertHighTemp);
+  document.getElementById('cf-lowbat').value = cfg.lowBatPct;
+  document.getElementById('cf-hightemp').value = cfg.highTempF;
+  document.getElementById('cf-gridvmin').value = cfg.gridVMin;
+}
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+function loadCfg() {
+  try { const s=localStorage.getItem('sf_v6'); if(s) Object.assign(cfg,JSON.parse(s)); } catch(e){}
+  document.getElementById('cf-host').value=cfg.host;
+  document.getElementById('cf-port').value=cfg.port;
+  document.getElementById('cf-prefix').value=cfg.prefix;
+  document.getElementById('cf-user').value=cfg.user;
+  document.getElementById('cf-maxpv').value=cfg.maxPv;
+  document.getElementById('cf-maxload').value=cfg.maxLoad;
+  document.getElementById('cf-zip').value=cfg.zip||'';
+  document.getElementById('cf-wxkey').value=cfg.wxKey||'';
+  loadAlertToggles();
+}
+
+function saveCfg() {
+  cfg.host=document.getElementById('cf-host').value.trim();
+  cfg.port=parseInt(document.getElementById('cf-port').value)||9001;
+  cfg.prefix=document.getElementById('cf-prefix').value.trim()||'solar_assistant';
+  cfg.user=document.getElementById('cf-user').value.trim();
+  cfg.pass=document.getElementById('cf-pass').value;
+  cfg.maxPv=parseInt(document.getElementById('cf-maxpv').value)||10000;
+  cfg.maxLoad=parseInt(document.getElementById('cf-maxload').value)||15000;
+  cfg.zip=document.getElementById('cf-zip').value.trim();
+  cfg.wxKey=document.getElementById('cf-wxkey').value.trim();
+  cfg.lowBatPct=parseInt(document.getElementById('cf-lowbat').value)||20;
+  cfg.highTempF=parseInt(document.getElementById('cf-hightemp').value)||130;
+  cfg.gridVMin=parseInt(document.getElementById('cf-gridvmin').value)||100;
+  localStorage.setItem('sf_v6',JSON.stringify(cfg));
+}
+
+// ─── DEBUG ────────────────────────────────────────────────────────────────────
+function log(msg,type='') {
+  const ts=new Date().toLocaleTimeString();
+  ['splash-log','drawer-log'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    const line=document.createElement('div'); line.className=type;
+    line.textContent=ts+'  '+msg; el.appendChild(line); el.scrollTop=el.scrollHeight;
+    while(el.children.length>60) el.removeChild(el.firstChild);
+  });
+}
+
+function setStatus(s,label) {
+  document.getElementById('conn-pill').className='pill '+s;
+  document.getElementById('conn-txt').textContent=label||s.toUpperCase();
+  document.getElementById('live-dot').classList.toggle('visible',s==='connected');
+  document.getElementById('hdr-status').textContent=s==='connected'?'LIVE DATA':s==='connecting'?'CONNECTING…':'OFFLINE';
+  mqttConnected = s === 'connected';
+}
+
+// ─── OPENWEATHER ──────────────────────────────────────────────────────────────
+function wxIconEmoji(iconCode) {
+  const m={'01d':'☀️','01n':'🌙','02d':'⛅','02n':'☁️','03d':'☁️','03n':'☁️','04d':'☁️','04n':'☁️','09d':'🌧️','09n':'🌧️','10d':'🌦️','10n':'🌧️','11d':'⛈️','11n':'⛈️','13d':'🌨️','13n':'🌨️','50d':'🌫️','50n':'🌫️'};
+  return m[iconCode]||'🌤️';
+}
+
+function pvPotential(localHour, cloudPct) {
+  let sunFactor=0;
+  if(localHour>=5&&localHour<=19){const t=(localHour-5)/14;sunFactor=Math.sin(t*Math.PI);}
+  return Math.max(0,Math.min(1,sunFactor*(1-(cloudPct/100)*0.85)));
+}
+
+async function fetchWeather() {
+  const zip=cfg.zip||document.getElementById('cf-zip').value.trim();
+  const key=cfg.wxKey||document.getElementById('cf-wxkey').value.trim();
+  const statusEl=document.getElementById('wx-status');
+  const noDataEl=document.getElementById('wx-no-data');
+
+  function showWxStatus(msg,color){ if(statusEl){statusEl.style.display='block';statusEl.style.color=color||'var(--sol)';statusEl.textContent=msg;} if(noDataEl)noDataEl.style.display='none'; }
+
+  if(!zip||!key){ log('Weather: Missing zip code','e'); if(noDataEl)noDataEl.style.display='block'; if(statusEl)statusEl.style.display='none'; return; }
+
+  showWxStatus('⏳ Fetching weather for '+zip+'…','var(--sol)');
+  log('☁ Fetching weather for zip '+zip+'…','i');
+
+  try{
+    const geoUrl=`https://api.openweathermap.org/geo/1.0/zip?zip=${zip},US&appid=${key}`;
+    const geoRes=await fetch(geoUrl);
+    if(!geoRes.ok){const b=await geoRes.text().catch(()=>'');if(geoRes.status===401)throw new Error('Weather service temporarily unavailable (401). Please try again later.');throw new Error('Geocode failed: HTTP '+geoRes.status+' '+b);}
+    const geo=await geoRes.json();wxLat=geo.lat;wxLon=geo.lon;wxCity=geo.name||zip;
+    log('☁ Location: '+wxCity+' ('+wxLat.toFixed(2)+', '+wxLon.toFixed(2)+')','ok');
+    showWxStatus('📍 Found '+wxCity+' — loading forecast…','var(--bat)');
+
+    const fUrl=`https://api.openweathermap.org/data/2.5/forecast?lat=${wxLat}&lon=${wxLon}&appid=${key}&units=imperial`;
+    const fRes=await fetch(fUrl);if(!fRes.ok)throw new Error('Forecast failed: HTTP '+fRes.status);
+    wxData=await fRes.json();
+
+    const cUrl=`https://api.openweathermap.org/data/2.5/weather?lat=${wxLat}&lon=${wxLon}&appid=${key}&units=imperial`;
+    const cRes=await fetch(cUrl);if(!cRes.ok)throw new Error('Current weather failed: HTTP '+cRes.status);
+    const current=await cRes.json();
+
+    log('☁ Weather loaded! '+wxData.list.length+' forecast points','ok');
+    if(statusEl)statusEl.style.display='none';
+
+    renderWeatherHeader(current);
+    renderWeatherTimeline();
+    checkWeatherAlerts(wxData.list);
+
+    if(wxRefreshTimer)clearInterval(wxRefreshTimer);
+    wxRefreshTimer=setInterval(fetchWeather,30*60*1000);
+  }catch(err){ log('☁ Weather error: '+err.message,'e'); showWxStatus('⚠ '+err.message,'#ff6060'); }
+}
+
+function renderWeatherHeader(current) {
+  const hdr=document.getElementById('hdr-weather');
+  const icon=wxIconEmoji(current.weather[0].icon);
+  hdr.classList.add('has-data');
+  hdr.innerHTML=`<span class="wx-icon-hdr">${icon}</span><span class="wx-temp-hdr">${Math.round(current.main.temp)}°F</span><span class="wx-desc-hdr">${current.weather[0].description}</span><span class="wx-loc-hdr">${wxCity} · ☁ ${current.clouds.all}%</span>`;
+}
+
+function renderWeatherTimeline() {
+  if(!wxData||!wxData.list) return;
+  const timeline=document.getElementById('wx-timeline');
+  const noData=document.getElementById('wx-no-data'); if(noData)noData.style.display='none';
+  const statusEl=document.getElementById('wx-status'); if(statusEl)statusEl.style.display='none';
+  const tzOffset=wxData.city.timezone;
+  const now=Math.floor(Date.now()/1000);
+  const forecasts=wxData.list.filter(f=>f.dt>=now-5400).slice(0,16);
+  document.getElementById('wx-loc').textContent=wxCity.toUpperCase();
+  timeline.querySelectorAll('.wx-hour,.wx-day-sep').forEach(el=>el.remove());
+
+  let lastDay = '';
+  forecasts.forEach((f,idx)=>{
+    const dt=new Date((f.dt+tzOffset)*1000);
+    const localHour=dt.getUTCHours();
+    const timeStr=localHour===0?'12AM':localHour<12?localHour+'AM':localHour===12?'12PM':(localHour-12)+'PM';
+    const icon=wxIconEmoji(f.weather[0].icon);
+    const clouds=f.clouds.all;
+    const pvPot=pvPotential(localHour,clouds);
+    const pvPctVal=Math.round(pvPot*100);
+    const loss=getProductionLoss(f.weather[0].id, clouds);
+    const isDaytime=f.weather[0].icon.includes('d');
+    const isAlertHour=isDaytime && loss >= 30;
+    let cloudClass=clouds>75?'heavy':clouds>50?'cloudy':clouds>20?'partly':'clear';
+    const isNow=idx===0;
+
+    // Loss color: green=0, yellow=30, orange=50, red=80, dark red=95
+    let lossColor = loss >= 95 ? '#ff3333' : loss >= 80 ? '#ff6644' : loss >= 50 ? '#ff9933' : loss >= 30 ? '#ffcc00' : 'var(--bat)';
+    let lossLabel = loss > 0 ? '-'+loss+'%' : '✓';
+
+    // Day separator
+    const dayKey=dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'});
+    if(dayKey!==lastDay){
+      lastDay=dayKey;
+      const sep=document.createElement('div');
+      sep.className='wx-day-sep';
+      sep.textContent=dayKey.toUpperCase();
+      timeline.appendChild(sep);
+    }
+
+    const el=document.createElement('div');
+    el.className='wx-hour'+(isNow?' now-hour':'')+(isAlertHour?' wx-alert-hour':'');
+    el.title=f.weather[0].description+' · Wind '+f.wind.speed.toFixed(0)+' mph · PV Loss: '+loss+'%';
+    el.innerHTML=`<div class="wx-hour-time">${timeStr}</div><div class="wx-hour-icon">${icon}</div><div class="wx-hour-temp">${Math.round(f.main.temp)}°</div><div class="wx-hour-loss" style="color:${lossColor};font-family:'DM Mono',monospace;font-size:11px;font-weight:600;text-align:center;min-width:32px">${isDaytime?lossLabel:'🌙'}</div><div class="wx-hour-cloud-wrap"><div class="wx-hour-pv-bar"><div class="wx-hour-pv-fill" style="width:${pvPctVal}%"></div></div></div>`;
+    timeline.appendChild(el);
+  });
+}
+
+// ─── MQTT ─────────────────────────────────────────────────────────────────────
+function connectMQTT() {
+  if(!cfg.host){log('No host configured','e');return;}
+  if(mqttClient){try{mqttClient.end(true);}catch(e){} mqttClient=null;}
+
+  const userPort = cfg.port || 9001;
+  const altPort = userPort === 9001 ? 1883 : 9001;
+  const ports = [userPort, altPort];
+  let attempt = 0;
+
+  function tryPort(port) {
+    if(mqttClient){try{mqttClient.end(true);}catch(e){} mqttClient=null;}
+    const url = `ws://${cfg.host}:${port}/mqtt`;
+    log('Connecting → ' + url + ' (attempt ' + (attempt+1) + '/2)', 'i');
+    setStatus('connecting');
+
+    const opts = {
+      clientId:'sf_v7_'+Math.random().toString(16).slice(2,8),
+      clean:true, reconnectPeriod: attempt === 0 ? 0 : 5000,
+      connectTimeout:8000, keepalive:60
+    };
+    if(cfg.user){opts.username=cfg.user;opts.password=cfg.pass;}
+    mqttClient = mqtt.connect(url, opts);
+
+    // Timeout — if first port doesn't connect in 8s, try the other
+    let failTimer = null;
+    if (attempt === 0) {
+      failTimer = setTimeout(() => {
+        if (attempt === 0) {
+          attempt = 1;
+          log('Port ' + port + ' timed out → trying ' + altPort, 'i');
+          tryPort(altPort);
+        }
+      }, 8000);
+    }
+
+    mqttClient.on('connect',()=>{
+      if (failTimer) clearTimeout(failTimer);
+      log('✓ Connected on port ' + port + '!','ok'); setStatus('connected','LIVE');
+      // Save working port
+      if (port !== userPort) {
+        cfg.port = port;
+        localStorage.setItem('sf_v6', JSON.stringify(cfg));
+        log('Saved port ' + port + ' as default','i');
+      }
+      mqttClient.options.reconnectPeriod = 5000;
+      resolveAlert('mqtt_lost');
+      if(window._mqttLostTimer){ clearTimeout(window._mqttLostTimer); window._mqttLostTimer=null; }
+      gridWasOnline = null; gridZeroCount = 0;
+      const p=cfg.prefix;
+      mqttClient.subscribe([p+'/#'],{qos:0},(err)=>{
+        if(err){log('Subscribe error: '+err.message,'e');return;}
+        log('Subscribed to '+p+'/#. Waiting for data…','ok');
+      });
+    });
+
+    mqttClient.on('message',(topic,msg)=>{
+      const raw = msg.toString();
+      const val = parseFloat(raw);
+      const t = topic.toLowerCase();
+
+      rawMQTT[topic] = isNaN(val) ? raw : val;
+      if(!topicsSeen.has(topic)){topicsSeen.add(topic);log('📡 '+topic+' = '+raw,'i');}
+
+      // ── EXTENDED DATA PARSING ──
+      const batMatch = t.match(/battery_(\d+)\//);
+      if (batMatch) {
+        const bi = parseInt(batMatch[1]) - 1;
+        if (bi >= 0 && bi < 15 && !isNaN(val)) {
+          batModules[bi].seen = true;
+          if(t.includes('voltage'))batModules[bi].volt=val;
+          if(t.includes('current'))batModules[bi].amp=val;
+          if(t.includes('power'))batModules[bi].power=val;
+          if(t.includes('temperature'))batModules[bi].temp=val;
+          if(t.includes('state_of_charge'))batModules[bi].soc=val;
+        }
+      }
+
+      const invMatch = t.match(/inverter_(\d+)\//);
+      if (invMatch) {
+        const ii = parseInt(invMatch[1]) - 1;
+        if (ii >= 0 && ii < 12) {
+          invUnits[ii].seen = true;
+          if(!isNaN(val)){
+            if(t.includes('temperature'))invUnits[ii].temp=val;
+            if(t.includes('power'))invUnits[ii].power=val;
+          } else {
+            if(t.includes('serial'))invUnits[ii].serial=raw;
+            if(t.includes('model'))invUnits[ii].model=raw;
+            if(t.includes('firmware'))invUnits[ii].firmware=raw;
+          }
+        }
+      }
+
+      const pvMatch = t.match(/(?:pv|string)_(\d+)\//);
+      if (pvMatch && !isNaN(val)) {
+        const pi = parseInt(pvMatch[1]) - 1;
+        if (pi >= 0 && pi < 4) {
+          pvStrings[pi].seen = true;
+          if(t.includes('voltage'))pvStrings[pi].volt=val;
+          if(t.includes('current'))pvStrings[pi].amp=val;
+          if(t.includes('power'))pvStrings[pi].power=val;
+        }
+      }
+
+      const phMatch = t.match(/(?:grid_l|phase_|l)(\d)\//i) || t.match(/grid_.*_l(\d)/i);
+      if (phMatch && !isNaN(val)) {
+        const li = parseInt(phMatch[1]) - 1;
+        if (li >= 0 && li < 3) {
+          gridPhases[li].seen = true;
+          if(t.includes('voltage'))gridPhases[li].volt=val;
+          if(t.includes('frequency'))gridPhases[li].freq=val;
+          if(t.includes('power'))gridPhases[li].power=val;
+          if(t.includes('current'))gridPhases[li].current=val;
+        }
+      }
+
+      if (!isNaN(val)) {
+        if(t.includes('load_l1'))loadData.l1=val;
+        if(t.includes('load_l2'))loadData.l2=val;
+        if(t.includes('apparent'))loadData.apparent=val;
+        if(t.includes('power_factor'))loadData.pf=val;
+      }
+
+      if(isNaN(val))return;
+
+      const devMatch=t.match(/(?:inverter|battery)_(\d+)\//);
+      const devIdx=devMatch?parseInt(devMatch[1])-1:-1;
+      const isTotal=t.includes('/total/');
+      const isDevice=devIdx>=0&&devIdx<=1;
+
+      if(isDevice){
+        const b=state.bat[devIdx];const seg=t.split('/').slice(-2).join('/');
+        if(seg==='voltage/state')b.volt=val;else if(seg==='current/state')b.amp=val;else if(seg==='power/state')b.power=val;
+        else if(seg==='temperature/state')b.temp=val;else if(seg==='state_of_charge/state')b.soc=val;
+        else if(t.includes('battery_voltage'))b.volt=val;else if(t.includes('battery_current'))b.amp=val;
+        else if(t.includes('battery_power'))b.power=val;else if(t.includes('battery_temperature'))b.temp=val;
+        else if(t.includes('battery_state_of_charge'))b.soc=val;else if(t.includes('state_of_charge'))b.soc=val;
+      }
+      if(t.includes('pv_power')){if(isTotal||!state.pv)state.pv=val;}
+      if(t.includes('grid_power'))state.grid=val; if(t.includes('grid_voltage'))state.gVolt=val;
+      if(t.includes('grid_frequency'))state.gFreq=val; if(t.includes('load_power'))state.load=val;
+      if(t.includes('pv_voltage'))state.pvVolt=val; if(t.includes('pv_current'))state.pvAmp=val;
+      if(t.includes('inverter_temperature')||(t.includes('/temperature/state')&&!t.includes('battery')))state.iTemp=val;
+
+      const isBatSOC=t.includes('battery_state_of_charge')||t.includes('state_of_charge');
+      const isBatPow=t.includes('battery_power')||(!isTotal&&isDevice&&t.endsWith('power/state'));
+      const isBatVolt=t.includes('battery_voltage')||(!isTotal&&isDevice&&t.endsWith('voltage/state'));
+      const isBatAmp=t.includes('battery_current')||(!isTotal&&isDevice&&t.endsWith('current/state'));
+      const isBatTemp=t.includes('battery_temperature')||(!isTotal&&isDevice&&t.endsWith('temperature/state'));
+
+      if(isBatSOC){if(isTotal){state.soc=val;}else{const v=state.bat.map(b=>b.soc).filter(v=>v!==null);if(v.length)state.soc=v.reduce((a,b)=>a+b,0)/v.length;}}
+      if(isBatPow){if(isTotal){state.bPower=val;}else{const v=state.bat.map(b=>b.power).filter(v=>v!==null);if(v.length)state.bPower=v.reduce((a,b)=>a+b,0);}}
+      if(isBatVolt){if(isTotal){state.bVolt=val;}else{const v=state.bat.map(b=>b.volt).filter(v=>v!==null);if(v.length)state.bVolt=v.reduce((a,b)=>a+b,0)/v.length;}}
+      if(isBatAmp){if(isTotal){state.bAmp=val;}else{const v=state.bat.map(b=>b.amp).filter(v=>v!==null);if(v.length)state.bAmp=v.reduce((a,b)=>a+b,0);}}
+      if(isBatTemp){if(isTotal)state.bTemp=val;else if(devIdx===0)state.bTemp=val;}
+
+      updateUI();
+      checkSystemAlerts();
+      recordSnapshot();
+
+      if(openDetailPanel && Date.now() - (window._lastDetailRefresh||0) > 2000) {
+        window._lastDetailRefresh = Date.now();
+        populateDetail(openDetailPanel);
+      }
+    });
+
+    mqttClient.on('error',(e)=>{
+      log('Error: '+(e.message||e),'e');
+      // If first port fails, try fallback
+      if (failTimer) clearTimeout(failTimer);
+      if (attempt === 0) {
+        attempt = 1;
+        log('Port ' + port + ' error → trying ' + altPort, 'i');
+        tryPort(altPort);
+      }
+    });
+
+    mqttClient.on('close',()=>{
+      log('Connection closed','e'); setStatus('disconnected');
+      if(cfg.alertGrid && !window._mqttLostTimer) {
+        window._mqttLostTimer = setTimeout(()=>{
+          window._mqttLostTimer = null;
+          if(!mqttConnected) {
+            fireAlert('mqtt_lost','MQTT connection to Solar Assistant lost. Live monitoring interrupted. Auto-reconnecting…');
+          }
+        }, 15000);
+      }
+    });
+
+    mqttClient.on('offline',()=>{log('Broker unreachable','e');setStatus('disconnected');});
+    mqttClient.on('reconnect',()=>{log('Reconnecting…','i');setStatus('connecting','RECONNECTING');});
+  }
+
+  tryPort(userPort);
+}
+
+// ─── UI HELPERS ───────────────────────────────────────────────────────────────
+const CIRC=314;
+function setRing(id,pct){pct=Math.min(100,Math.max(0,pct||0));const v=CIRC*pct/100;const el=document.getElementById('ring-'+id);const glow=document.getElementById('ring-glow-'+id);if(el)el.style.strokeDasharray=v+' '+(CIRC-v);if(glow)glow.style.strokeDasharray=v+' '+(CIRC-v);}
+function animPop(el){if(!el)return;el.classList.remove('num-update');void el.offsetWidth;el.classList.add('num-update');}
+function setTxt(id,val){const el=document.getElementById(id);if(el&&el.textContent!==val)el.textContent=val;}
+function fmtW(v){if(v===null)return'—';return Math.abs(v)>=1000?(v/1000).toFixed(1)+'k':Math.round(v).toString();}
+function showLbl(id,text,show,bright){const el=document.getElementById(id);if(!el)return;el.textContent=text;el.style.opacity=show?(bright?'1':'0.4'):'0';}
+function pushSpark(key,val){if(val===null)return;sparks[key].push(val);if(sparks[key].length>40)sparks[key].shift();renderSpark(key);}
+
+function renderSpark(key) {
+  const data=sparks[key]; if(data.length<2)return;
+  const svgEl=document.querySelector('#spark-'+key+' svg'); if(!svgEl)return;
+  const W=svgEl.clientWidth||100,H=svgEl.clientHeight||22;
+  const min=Math.min(...data),max=Math.max(...data),range=Math.max(max-min,1);
+  const pts=data.map((v,i)=>{const x=(i/(data.length-1))*W;const y=H-((v-min)/range)*(H-2)-1;return x.toFixed(1)+','+y.toFixed(1)}).join(' ');
+  const line=document.getElementById('sl-'+key);const fill=document.getElementById('sf-'+key);
+  if(line)line.setAttribute('points',pts);
+  if(fill)fill.setAttribute('points','0,'+H+' '+pts+' '+W.toFixed(1)+','+H);
+}
+
+// ─── MAIN UI UPDATE ───────────────────────────────────────────────────────────
+let lastSparkT=0;
+function updateUI(){
+  const s=state;
+  const pvPct=s.pv!==null?(s.pv/cfg.maxPv)*100:0;
+  const ldPct=s.load!==null?(s.load/cfg.maxLoad)*100:0;
+  const grdPct=s.grid!==null?(Math.abs(s.grid)/10000)*100:0;
+
+  // Gauges (hidden but still track data for ring state)
+  setRing('sol',pvPct);setRing('bat',s.soc||0);setRing('grd',grdPct);setRing('load',ldPct);
+  setTxt('pct-sol',s.pv!==null?Math.round(pvPct)+'%':'—');
+  setTxt('pct-bat',s.soc!==null?Math.round(s.soc)+'%':'—');
+  setTxt('pct-grd',s.grid!==null?Math.round(grdPct)+'%':'—');
+  setTxt('pct-load',s.load!==null?Math.round(ldPct)+'%':'—');
+
+  const valSol=document.getElementById('val-sol');const ns=fmtW(s.pv);if(valSol&&valSol.textContent!==ns){valSol.textContent=ns;animPop(valSol);}
+  const valBat=document.getElementById('val-bat');const nb=s.bPower!==null?fmtW(Math.abs(s.bPower)):'—';if(valBat&&valBat.textContent!==nb){valBat.textContent=nb;animPop(valBat);}
+  const valGrd=document.getElementById('val-grd');const ng=s.grid!==null?fmtW(Math.abs(s.grid)):'—';if(valGrd&&valGrd.textContent!==ng){valGrd.textContent=ng;animPop(valGrd);}
+  const valLoad=document.getElementById('val-load');const nl=fmtW(s.load);if(valLoad&&valLoad.textContent!==nl){valLoad.textContent=nl;animPop(valLoad);}
+
+  setTxt('bat-dir',s.bPower===null?'—':s.bPower>50?'↑ CHARGING':s.bPower<-50?'↓ DISCHARGING':'IDLE');
+  const socFill=document.getElementById('soc-fill'); if(s.soc!==null&&socFill)socFill.style.width=s.soc+'%';
+
+  ['sol','bat','grd','load'].forEach(k=>{const card=document.getElementById('card-'+k);if(!card)return;const active=k==='sol'?s.pv>20:k==='bat'?(s.bPower!==null&&Math.abs(s.bPower)>20):k==='grd'?(s.grid!==null&&Math.abs(s.grid)>20):s.load>20;card.classList.toggle('active',!!active);});
+
+  const badge=document.getElementById('grd-badge');
+  if(badge&&s.grid!==null){if(s.grid<-50){badge.className='g-badge exp';badge.textContent='EXPORTING';}else if(s.grid>50){badge.className='g-badge imp';badge.textContent='IMPORTING';}else{badge.className='g-badge idle';badge.textContent='IDLE';}}
+
+  setTxt('sub-sol',s.pv!==null?'Max: '+cfg.maxPv+'W':'—');
+
+  // ── POWER FLOW ANIMATION ──
+  const pvOn=s.pv!==null&&s.pv>20;const batOn=s.bPower!==null&&Math.abs(s.bPower)>30;
+  const grdOn=s.grid!==null&&Math.abs(s.grid)>20;const ldOn=s.load!==null&&s.load>20;
+  const fp=(id,on,cls)=>{const el=document.getElementById(id);if(el)el.setAttribute('class','fp fp-'+cls+' '+(on?'fa-'+cls:'fp-static'));};
+  fp('fp-sol',pvOn,'sol');
+  // Battery: positive bPower = charging (flow toward bat = reverse), negative = discharging (flow from bat = normal)
+  const batEl=document.getElementById('fp-bat');
+  if(batEl){const batCls=batOn?(s.bPower>0?'fa-bat-rev':'fa-bat'):'fp-static';batEl.setAttribute('class','fp fp-bat '+batCls);}
+  // Grid: positive = importing (flow from grid = normal), negative = exporting (flow to grid = reverse)
+  const grdEl=document.getElementById('fp-grd');
+  if(grdEl){const grdCls=grdOn?(s.grid>0?'fa-grd':'fa-grd-rev'):'fp-static';grdEl.setAttribute('class','fp fp-grd '+grdCls);}
+  fp('fp-load',ldOn,'load');
+  showLbl('lbl-sol',fmtW(s.pv)+'W',true,pvOn);showLbl('lbl-bat',fmtW(Math.abs(s.bPower||0))+'W',true,batOn);
+  showLbl('lbl-grd',fmtW(Math.abs(s.grid||0))+'W',true,grdOn);showLbl('lbl-load',fmtW(s.load)+'W',true,ldOn);
+
+  // Sparklines (still record even though strip is hidden — used by history)
+  const now=Date.now();if(now-lastSparkT>5000){lastSparkT=now;pushSpark('sol',s.pv);pushSpark('soc',s.soc);pushSpark('grd',s.grid!==null?Math.abs(s.grid):null);pushSpark('load',s.load);pushSpark('bv',s.bVolt);pushSpark('gf',s.gFreq);}
+}
+
+// ─── CLOCK ────────────────────────────────────────────────────────────────────
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});},1000);
+
+function toggleFs(){if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{});else document.exitFullscreen().catch(()=>{});}
+document.addEventListener('keydown', e => { if(e.key==='Escape' && openDetailPanel) closeDetail(openDetailPanel); });
+
+const ADMIN_PASS=null; // password removed for simplified access
+function toggleDrawer(){document.getElementById('drawer').classList.toggle('open');}
+function adminClose(){}
+function adminSubmit(){}
+
+// switchBat replaced by detail overlay battery tabs
+
+function toggleAdvancedSplash(){
+  const el=document.getElementById('splash-advanced');
+  el.style.display=el.style.display==='none'?'block':'none';
+  document.getElementById('adv-toggle').textContent=el.style.display==='none'?'advanced':'hide advanced';
+}
+
+function connectFromSplash(){
+  const host=document.getElementById('si-host').value.trim();
+  const zip=document.getElementById('si-zip').value.trim();
+  if(!host){
+    document.getElementById('splash-status').innerHTML='<span style="color:var(--danger)">Please enter your Solar Assistant IP address</span>';
+    document.getElementById('si-host').focus();
+    return;
+  }
+  cfg.host=host;
+  cfg.port=parseInt(document.getElementById('si-port').value)||9001;
+  cfg.prefix=document.getElementById('si-prefix').value.trim()||'solar_assistant';
+  cfg.user=document.getElementById('si-user').value.trim();
+  cfg.pass=document.getElementById('si-pass').value;
+  cfg.zip=zip;
+  cfg.wxKey=document.getElementById('si-wxkey').value.trim();
+
+  document.getElementById('splash-status').innerHTML='<span style="color:var(--sol)">Connecting to '+host+'…</span>';
+
+  document.getElementById('cf-host').value=cfg.host;document.getElementById('cf-port').value=cfg.port;
+  document.getElementById('cf-prefix').value=cfg.prefix;document.getElementById('cf-zip').value=cfg.zip;
+  document.getElementById('cf-wxkey').value=cfg.wxKey;localStorage.setItem('sf_v6',JSON.stringify(cfg));
+  document.getElementById('splash').style.display='none';document.getElementById('splash').classList.add('hidden');connectMQTT();
+  if(cfg.zip&&cfg.wxKey)setTimeout(fetchWeather,1500);
+}
+
+function reconnect(){saveCfg();document.getElementById('drawer').classList.remove('open');connectMQTT();if(cfg.zip&&cfg.wxKey)setTimeout(fetchWeather,1500);}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+// Version display
+document.querySelectorAll('#ver-splash,#ver-hdr,#ver-drawer').forEach(el => { if(el) el.textContent = VERSION; });
+
+loadCfg();
+
+// Open IndexedDB
+openHistDB().then(() => {
+  log('📊 History DB opened ('+VERSION+')','ok');
+  // Aggregation timers
+  setInterval(aggregate5Min, 5 * 60 * 1000);    // every 5 min
+  setInterval(aggregateHourly, 60 * 60 * 1000);  // every hour
+  setInterval(purgeOldData, 6 * 60 * 60 * 1000); // every 6 hours
+  // Daily aggregation at midnight check every 30 min
+  setInterval(() => {
+    const h = new Date().getHours(), m = new Date().getMinutes();
+    if(h === 0 && m < 30) aggregateDaily();
+  }, 30 * 60 * 1000);
+  purgeOldData(); // initial purge on load
+}).catch(e => log('📊 DB init failed: '+e,'e'));
+
+// ─── URL PARAMETER HANDLING (for Fleet Manager) ──────────────────────────────
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('host')) {
+  cfg.host = urlParams.get('host');
+  cfg.port = parseInt(urlParams.get('port')) || 9001;
+  cfg.prefix = urlParams.get('prefix') || 'solar_assistant';
+  if (urlParams.get('zip')) cfg.zip = urlParams.get('zip');
+  if (urlParams.get('user')) cfg.user = urlParams.get('user');
+  if (urlParams.get('pass')) cfg.pass = urlParams.get('pass');
+  cfg.wxKey = cfg.wxKey || 'e1402547e7fb3358332b3b921a2e2027';
+  localStorage.setItem('sf_v6', JSON.stringify(cfg));
+  // Update splash fields in case user opens settings
+  document.getElementById('si-host').value = cfg.host;
+  document.getElementById('si-port').value = cfg.port;
+  document.getElementById('si-prefix').value = cfg.prefix;
+  document.getElementById('si-zip').value = cfg.zip || '';
+  // Show system name in header if provided
+  if (urlParams.get('name')) {
+    const brandTag = document.querySelector('.brand-tag');
+    if (brandTag) brandTag.textContent = urlParams.get('name');
+  }
+  document.getElementById('splash').style.display='none';
+  document.getElementById('splash').classList.add('hidden');
+  connectMQTT();
+  if (cfg.zip && cfg.wxKey) setTimeout(fetchWeather, 1500);
+
+  // ── CUSTOMER vs ADMIN vs KIOSK MODE ──────────────────────────────────────
+  const mode = urlParams.get('mode') || 'admin';
+  if (mode === 'customer' || mode === 'kiosk') {
+    // Hide admin-only elements
+    const fleetBack = document.getElementById('fleet-back-btn');
+    if (fleetBack) fleetBack.style.display = 'none';
+    // Hide fleet map button, settings gear, fullscreen
+    document.querySelectorAll('.hdr-right .icon-btn').forEach(btn => {
+      const title = btn.getAttribute('title') || '';
+      const href = btn.getAttribute('href') || '';
+      if (href.includes('fleet') || title === 'Fleet Manager' || title === 'Settings') {
+        btn.style.display = 'none';
+      }
+    });
+
+    if (mode === 'kiosk') {
+      // Kiosk: strip to bare dashboard — no logout, no header buttons, no drawer
+      document.querySelectorAll('.hdr-right .icon-btn').forEach(btn => btn.style.display = 'none');
+      const logoutBtn = document.getElementById('customer-logout-btn');
+      if (logoutBtn) logoutBtn.style.display = 'none';
+      const brandName = document.querySelector('.brand-name');
+      if (brandName) brandName.textContent = urlParams.get('name') || 'SUNFUSION';
+      const brandTag = document.querySelector('.brand-tag');
+      if (brandTag) brandTag.innerHTML = urlParams.get('name') ? urlParams.get('name') + ' <span style="opacity:0.4">· Live Monitor</span>' : 'Live Energy Monitor';
+    } else {
+      // Customer mode
+      const logoutBtn = document.getElementById('customer-logout-btn');
+      if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+      const brandName = document.querySelector('.brand-name');
+      if (brandName) brandName.textContent = 'MY SOLAR';
+      const brandTag = document.querySelector('.brand-tag');
+      if (brandTag && urlParams.get('name')) {
+        brandTag.innerHTML = urlParams.get('name') + ' <span style="opacity:0.4">· Powered by SunFusion</span>';
+      }
+    }
+  } else {
+    // Admin mode — fleet back button already visible
+  }
+
+} else if(cfg.host){
+  document.getElementById('si-host').value=cfg.host;document.getElementById('si-port').value=cfg.port;
+  document.getElementById('si-prefix').value=cfg.prefix;document.getElementById('si-zip').value=cfg.zip||'';
+  document.getElementById('si-wxkey').value=cfg.wxKey||'';
+  document.getElementById('splash').style.display='none';
+  document.getElementById('splash').classList.add('hidden');connectMQTT();
+}
+if(cfg.zip&&cfg.wxKey)setTimeout(fetchWeather,cfg.host?2000:500);
+
+// ─── PWA SERVICE WORKER REGISTRATION ─────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    log('PWA: Service Worker registered','ok');
+    reg.addEventListener('updatefound', () => {
+      log('PWA: Update available — refresh to apply','i');
+    });
+  }).catch(err => {
+    // SW not available (file:// protocol or missing sw.js) — still works, just no offline cache
+    console.log('SW registration skipped:', err.message);
+  });
+}
+
+// ─── PWA INSTALL PROMPT ──────────────────────────────────────────────────────
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  // Show install button in header
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'inline-flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  log('PWA: App installed successfully!','ok');
+  deferredInstall = null;
+  const btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'none';
+});
+
+function customerLogout() {
+  // Clear remembered code
+  localStorage.removeItem('sf_customer_code');
+  // Clear saved config so splash doesn't auto-connect
+  localStorage.removeItem('sf_v6');
+  // Disconnect MQTT
+  if (mqttClient) { try { mqttClient.end(true); } catch(e){} }
+  // Redirect to customer portal
+  window.location.href = 'customer.html';
+}
+
+function pwaInstall() {
+  if (!deferredInstall) {
+    // iOS / Safari — show manual instructions
+    alert('To install SunFusion:\n\n📱 iOS: Tap Share → Add to Home Screen\n🪟 Windows: Click ⋮ menu → Install App\n🤖 Android: Tap ⋮ menu → Add to Home Screen');
+    return;
+  }
+  deferredInstall.prompt();
+  deferredInstall.userChoice.then(result => {
+    log('PWA: Install ' + result.outcome,'i');
+    deferredInstall = null;
+  });
+}
+</script>
+</body>
+</html>

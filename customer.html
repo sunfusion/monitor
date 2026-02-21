@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#FFB627">
+<title>SunFusion · My Solar System</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Mono:wght@400;500&family=Exo+2:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#050910; --bg-card:#0b1422; --bg-panel:#0d1a2a;
+  --border:rgba(255,255,255,0.10); --border-hi:rgba(255,255,255,0.20);
+  --txt:#f0f4f8; --txt-2:#8aacc8; --txt-3:#4a7090;
+  --sol:#FFB627; --sol-d:#E09800; --sol-g:rgba(255,182,39,0.15);
+  --bat:#00E5A0; --grd:#38B6FF; --danger:#ff4444;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { height:100%; background:var(--bg); color:var(--txt); font-family:'Exo 2',sans-serif; }
+
+.portal { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:40px 20px; gap:24px; }
+.portal-logo { font-size:72px; filter:drop-shadow(0 0 24px var(--sol-g)); }
+.portal-title { font-family:'Orbitron',sans-serif; font-size:36px; font-weight:900; letter-spacing:12px; background:linear-gradient(135deg,var(--sol),#fff8e0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; text-align:center; }
+.portal-sub { font-size:14px; letter-spacing:4px; color:var(--txt-2); text-transform:uppercase; font-family:'DM Mono',monospace; text-align:center; }
+
+/* ── CODE ENTRY ─────────────────── */
+.portal-form { display:flex; flex-direction:column; gap:14px; width:100%; max-width:400px; }
+.portal-label { font-size:12px; color:var(--txt-2); text-align:center; font-family:'DM Mono',monospace; letter-spacing:1px; }
+.portal-code { background:var(--bg-card); border:2px solid var(--border); border-radius:14px; padding:18px 24px; color:var(--txt); font-family:'Orbitron',sans-serif; font-size:28px; font-weight:700; letter-spacing:12px; text-align:center; outline:none; text-transform:uppercase; transition:border-color 0.2s; width:100%; }
+.portal-code:focus { border-color:var(--sol); }
+.portal-code::placeholder { color:var(--txt-3); font-size:20px; letter-spacing:8px; }
+.portal-code.err { border-color:var(--danger); animation:shake 0.3s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+.portal-btn { padding:16px; background:linear-gradient(135deg,var(--sol),var(--sol-d)); border:none; border-radius:12px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:14px; letter-spacing:4px; cursor:pointer; font-weight:700; box-shadow:0 4px 30px var(--sol-g); transition:all 0.2s; width:100%; }
+.portal-btn:hover { transform:translateY(-2px); box-shadow:0 8px 40px var(--sol-g); }
+.portal-msg { font-size:12px; text-align:center; font-family:'DM Mono',monospace; letter-spacing:1px; min-height:20px; }
+.remember-row { display:flex; align-items:center; justify-content:center; gap:8px; }
+.remember-cb { width:16px; height:16px; accent-color:var(--sol); cursor:pointer; }
+.remember-lbl { font-size:11px; color:var(--txt-3); font-family:'DM Mono',monospace; cursor:pointer; }
+
+/* ── FOUND CARD ─────────────────── */
+.found-wrap { width:100%; max-width:480px; display:none; }
+.found-wrap.active { display:block; }
+.found-card { background:var(--bg-card); border:1px solid var(--border-hi); border-radius:16px; padding:24px; text-align:center; }
+.found-name { font-family:'Orbitron',sans-serif; font-size:20px; font-weight:700; color:var(--sol); letter-spacing:3px; margin-bottom:4px; }
+.found-customer { font-size:13px; color:var(--txt-2); margin-bottom:4px; }
+.found-detail { font-family:'DM Mono',monospace; font-size:11px; color:var(--txt-3); margin-bottom:16px; }
+.found-btn { display:block; width:100%; padding:16px; background:linear-gradient(135deg,var(--bat),#00C48C); border:none; border-radius:10px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:13px; letter-spacing:3px; font-weight:700; cursor:pointer; text-decoration:none; text-align:center; transition:all 0.2s; box-shadow:0 4px 20px rgba(0,229,160,0.2); }
+.found-btn:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,229,160,0.3); }
+
+/* ── EDIT SECTION (always visible) ─ */
+.edit-card { background:var(--bg-card); border:1px solid var(--border-hi); border-radius:16px; padding:24px; margin-top:14px; }
+.edit-header { font-family:'Orbitron',sans-serif; font-size:12px; letter-spacing:3px; color:var(--sol); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.edit-header-icon { font-size:16px; }
+.e-group { margin-bottom:14px; }
+.e-lbl { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--txt-2); margin-bottom:4px; display:block; font-family:'DM Mono',monospace; }
+.e-inp { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 16px; color:var(--txt); font-family:'DM Mono',monospace; font-size:14px; outline:none; transition:border-color 0.2s; }
+.e-inp:focus { border-color:var(--sol); }
+.e-inp[readonly] { opacity:0.35; cursor:not-allowed; }
+.e-hint { font-size:10px; color:var(--txt-3); margin-top:3px; font-family:'DM Mono',monospace; line-height:1.5; }
+.e-row { display:flex; gap:12px; }
+.e-row > .e-group { flex:1; }
+.e-divider { border:none; border-top:1px solid var(--border); margin:16px 0; }
+.e-section { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--txt-3); font-family:'DM Mono',monospace; margin-bottom:10px; }
+.e-save-btn { width:100%; padding:14px; background:linear-gradient(135deg,var(--sol),var(--sol-d)); border:none; border-radius:10px; color:#0a0800; font-family:'Orbitron',sans-serif; font-size:12px; letter-spacing:3px; font-weight:700; cursor:pointer; transition:all 0.2s; margin-top:4px; }
+.e-save-btn:hover { transform:translateY(-1px); box-shadow:0 4px 20px var(--sol-g); }
+.e-msg { text-align:center; font-size:11px; font-family:'DM Mono',monospace; min-height:18px; margin-top:8px; }
+.logout-row { text-align:center; margin-top:14px; }
+.logout-link { color:var(--txt-3); font-family:'DM Mono',monospace; font-size:11px; letter-spacing:1px; cursor:pointer; text-decoration:underline; text-underline-offset:3px; background:none; border:none; }
+.logout-link:hover { color:var(--danger); }
+
+.portal-footer { font-size:11px; color:var(--txt-3); text-align:center; font-family:'DM Mono',monospace; letter-spacing:1px; margin-top:12px; }
+.portal-footer a { color:var(--txt-2); text-decoration:none; }
+.portal-footer a:hover { color:var(--sol); }
+</style>
+</head>
+<body>
+
+<div class="portal" id="portal">
+  <div class="portal-logo">☀️</div>
+  <div class="portal-title">SUNFUSION</div>
+  <div class="portal-sub">My Solar System</div>
+
+  <!-- ═══ CODE ENTRY ══════════════════════════ -->
+  <div class="portal-form" id="lookup-form">
+    <div class="portal-label">Enter your 6-digit access code</div>
+    <input class="portal-code" id="p-code" placeholder="A B C D E F" maxlength="6"
+      inputmode="text" autocomplete="off" autocorrect="off" spellcheck="false"
+      oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+      onkeydown="if(event.key==='Enter')lookupSystem()">
+    <div class="remember-row">
+      <input type="checkbox" class="remember-cb" id="p-remember">
+      <label class="remember-lbl" for="p-remember">Remember my code on this device</label>
+    </div>
+    <button class="portal-btn" onclick="lookupSystem()">VIEW MY SYSTEM</button>
+    <div class="portal-msg" id="p-msg"></div>
+  </div>
+
+  <!-- ═══ FOUND: SYSTEM CARD + EDIT BELOW IT ══ -->
+  <div class="found-wrap" id="found-wrap">
+
+    <!-- System Info -->
+    <div class="found-card">
+      <div class="found-name" id="found-name"></div>
+      <div class="found-customer" id="found-customer"></div>
+      <div class="found-detail" id="found-detail"></div>
+      <a class="found-btn" id="found-link" href="#">OPEN MY MONITOR →</a>
+    </div>
+
+    <!-- Edit Connection (always visible after lookup) -->
+    <div class="edit-card">
+      <div class="edit-header"><span class="edit-header-icon">⚙</span> EDIT MY CONNECTION</div>
+
+      <div class="e-section">🔌 Connection — You Can Change These</div>
+
+      <div class="e-group">
+        <label class="e-lbl">Solar Assistant IP Address</label>
+        <input class="e-inp" id="e-ip" placeholder="192.168.0.165" inputmode="url">
+        <div class="e-hint">From Solar Assistant → Settings → Local network<br>Copy only the numbers (e.g. 192.168.0.165)</div>
+      </div>
+
+      <div class="e-row">
+        <div class="e-group">
+          <label class="e-lbl">Port</label>
+          <input class="e-inp" id="e-port" value="9001" inputmode="numeric">
+          <div class="e-hint">Default: 9001</div>
+        </div>
+        <div class="e-group">
+          <label class="e-lbl">Zip Code</label>
+          <input class="e-inp" id="e-zip" placeholder="92081" inputmode="numeric" maxlength="5">
+          <div class="e-hint">For weather data</div>
+        </div>
+      </div>
+
+      <button class="e-save-btn" onclick="saveCustomerEdit()">💾 SAVE CHANGES</button>
+      <div class="e-msg" id="e-msg"></div>
+
+      <hr class="e-divider">
+      <div class="e-section">🔒 System Info — Set by Your Installer</div>
+
+      <div class="e-group">
+        <label class="e-lbl">System Name</label>
+        <input class="e-inp" id="e-name" readonly>
+      </div>
+      <div class="e-row">
+        <div class="e-group">
+          <label class="e-lbl">Customer</label>
+          <input class="e-inp" id="e-customer" readonly>
+        </div>
+        <div class="e-group">
+          <label class="e-lbl">Access Code</label>
+          <input class="e-inp" id="e-code" readonly style="font-family:'Orbitron',sans-serif;letter-spacing:4px;text-align:center;color:var(--bat)">
+        </div>
+      </div>
+      <div class="e-row">
+        <div class="e-group">
+          <label class="e-lbl">Group</label>
+          <input class="e-inp" id="e-group" readonly>
+        </div>
+        <div class="e-group">
+          <label class="e-lbl">Phone</label>
+          <input class="e-inp" id="e-phone" readonly>
+        </div>
+      </div>
+    </div>
+
+    <div class="logout-row">
+      <button class="logout-link" onclick="customerPortalLogout()">🚪 Log Out</button>
+    </div>
+  </div>
+
+  <div class="portal-footer">
+    SunFusion Energy Systems · (858) 217-8861<br>
+    <span style="opacity:0.5;margin-top:4px;display:inline-block">Your access code was provided by your solar installer.</span><br>
+    <a href="fleet.html" style="opacity:0.25;margin-top:12px;display:inline-block;font-size:10px">🔒 Admin</a>
+  </div>
+</div>
+
+<script>
+const DB_NAME = 'SunFusionFleet';
+const DB_VER = 1;
+const REMEMBER_KEY = 'sf_customer_code';
+let db = null;
+let currentSys = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('systems')) {
+        const store = d.createObjectStore('systems', { keyPath: 'id' });
+        store.createIndex('name', 'name', { unique: false });
+        store.createIndex('ip', 'ip', { unique: false });
+        store.createIndex('group', 'group', { unique: false });
+        store.createIndex('zip', 'zip', { unique: false });
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = e => reject(e.target.error);
+  });
+}
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('systems', 'readonly');
+    const req = tx.objectStore('systems').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+function dbPut(sys) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('systems', 'readwrite');
+    const req = tx.objectStore('systems').put(sys);
+    req.onsuccess = () => resolve();
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+// ═══ LOOKUP ════════════════════════════════════════════
+async function lookupSystem() {
+  const code = document.getElementById('p-code').value.trim().toUpperCase();
+  const msg = document.getElementById('p-msg');
+  if (!code || code.length < 6) {
+    msg.innerHTML = '<span style="color:var(--danger)">Please enter your full 6-digit code</span>';
+    document.getElementById('p-code').classList.remove('err');
+    void document.getElementById('p-code').offsetWidth;
+    document.getElementById('p-code').classList.add('err');
+    return;
+  }
+  msg.innerHTML = '<span style="color:var(--sol)">Looking up your system…</span>';
+  try {
+    if (!db) await openDB();
+    const systems = await dbGetAll();
+    const sys = systems.find(s => s.code === code);
+    if (!sys) {
+      msg.innerHTML = '<span style="color:var(--danger)">Code not found. Please check your access code and try again.</span>';
+      document.getElementById('p-code').classList.remove('err');
+      void document.getElementById('p-code').offsetWidth;
+      document.getElementById('p-code').classList.add('err');
+      return;
+    }
+    currentSys = sys;
+    if (document.getElementById('p-remember').checked) localStorage.setItem(REMEMBER_KEY, code);
+    showFound();
+    msg.textContent = '';
+  } catch (err) {
+    msg.innerHTML = '<span style="color:var(--danger)">Error looking up system. Please try again.</span>';
+    console.error(err);
+  }
+}
+
+// ═══ SHOW FOUND (card + edit fields visible) ══════════
+function showFound() {
+  if (!currentSys) return;
+  document.getElementById('lookup-form').style.display = 'none';
+  document.getElementById('found-wrap').classList.add('active');
+
+  // Card header
+  document.getElementById('found-name').textContent = currentSys.name;
+  document.getElementById('found-customer').textContent = currentSys.customer || '';
+  document.getElementById('found-detail').textContent = currentSys.zip ? `${currentSys.city || ''} ${currentSys.zip}` : '';
+
+  // Monitor link
+  const url = `monitor.html?host=${encodeURIComponent(currentSys.ip)}&port=${currentSys.port||9001}&name=${encodeURIComponent(currentSys.name)}&zip=${currentSys.zip||''}&mode=customer&code=${currentSys.code}`;
+  document.getElementById('found-link').href = url;
+
+  // Editable fields
+  document.getElementById('e-ip').value = currentSys.ip || '';
+  document.getElementById('e-port').value = currentSys.port || 9001;
+  document.getElementById('e-zip').value = currentSys.zip || '';
+
+  // Read-only fields
+  document.getElementById('e-name').value = currentSys.name || '';
+  document.getElementById('e-customer').value = currentSys.customer || '';
+  document.getElementById('e-code').value = currentSys.code || '';
+  document.getElementById('e-group').value = currentSys.group || '';
+  document.getElementById('e-phone').value = currentSys.phone || '';
+
+  document.getElementById('e-msg').textContent = '';
+}
+
+// ═══ SAVE CUSTOMER EDITS ══════════════════════════════
+async function saveCustomerEdit() {
+  const msg = document.getElementById('e-msg');
+  const ip = document.getElementById('e-ip').value.trim();
+  const port = parseInt(document.getElementById('e-port').value) || 9001;
+  const zip = document.getElementById('e-zip').value.trim();
+
+  if (!ip) { msg.innerHTML = '<span style="color:var(--danger)">IP address is required</span>'; return; }
+  if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+    msg.innerHTML = '<span style="color:var(--danger)">Invalid IP — use numbers only (e.g. 192.168.0.165)</span>'; return;
+  }
+
+  msg.innerHTML = '<span style="color:var(--sol)">Saving…</span>';
+  try {
+    currentSys.ip = ip;
+    currentSys.port = port;
+    currentSys.zip = zip;
+
+    if (zip && zip.length === 5) {
+      try {
+        const resp = await fetch(`https://api.openweathermap.org/geo/1.0/zip?zip=${zip},US&appid=e1402547e7fb3358332b3b921a2e2027`);
+        if (resp.ok) { const data = await resp.json(); currentSys.lat = data.lat; currentSys.lng = data.lon; currentSys.city = data.name || ''; }
+      } catch {}
+    }
+
+    await dbPut(currentSys);
+    msg.innerHTML = '<span style="color:var(--bat)">✅ Saved! Your monitor will use the new IP.</span>';
+
+    // Update monitor link with new values
+    const url = `monitor.html?host=${encodeURIComponent(ip)}&port=${port}&name=${encodeURIComponent(currentSys.name)}&zip=${zip||''}&mode=customer&code=${currentSys.code}`;
+    document.getElementById('found-link').href = url;
+    document.getElementById('found-detail').textContent = currentSys.zip ? `${currentSys.city || ''} ${currentSys.zip}` : '';
+  } catch (err) {
+    msg.innerHTML = '<span style="color:var(--danger)">Error saving. Try again.</span>';
+    console.error(err);
+  }
+}
+
+// ═══ LOGOUT ═══════════════════════════════════════════
+function customerPortalLogout() {
+  currentSys = null;
+  localStorage.removeItem(REMEMBER_KEY);
+  localStorage.removeItem('sf_v6');
+  document.getElementById('found-wrap').classList.remove('active');
+  document.getElementById('lookup-form').style.display = 'flex';
+  document.getElementById('p-code').value = '';
+  document.getElementById('p-msg').textContent = '';
+  setTimeout(() => document.getElementById('p-code').focus(), 200);
+}
+
+// ═══ INIT ═════════════════════════════════════════════
+(async function init() {
+  try { await openDB(); } catch {}
+  const saved = localStorage.getItem(REMEMBER_KEY);
+  if (saved) { document.getElementById('p-code').value = saved; setTimeout(lookupSystem, 300); }
+  else { setTimeout(() => document.getElementById('p-code').focus(), 300); }
+  const params = new URLSearchParams(location.search);
+  if (params.get('code')) { document.getElementById('p-code').value = params.get('code'); setTimeout(lookupSystem, 300); }
+})();
+</script>
+</body>
+</html>
